@@ -4,6 +4,7 @@ import React from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { Button } from './button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './card'
+import { clientLogger } from '@/lib/client-logger'
 
 interface ErrorBoundaryProps {
   children: React.ReactNode
@@ -26,8 +27,8 @@ class ErrorBoundaryClass extends React.Component<ErrorBoundaryProps, ErrorBounda
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Log to browser console for debugging
-    console.error('[ErrorBoundary]', error.message, {
+    // Log error for debugging
+    clientLogger.error('Error boundary caught error', {
       error,
       componentStack: errorInfo.componentStack,
       errorBoundary: 'ErrorBoundaryClass'

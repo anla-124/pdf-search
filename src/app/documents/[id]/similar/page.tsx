@@ -5,7 +5,7 @@ import { DashboardLayout } from '@/components/dashboard/layout'
 import { SimilaritySearchForm } from '@/components/similarity/similarity-search-form'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import type { Document as AppDocument } from '@/types'
+import type { DatabaseDocument as AppDocument } from '@/types/external-apis'
 import { ArrowLeft, FileText, Sparkles, Target, Building, Users, Briefcase, Globe } from 'lucide-react'
 import { formatUploadDate } from '@/lib/date-utils'
 import {

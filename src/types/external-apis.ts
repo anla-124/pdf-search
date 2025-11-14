@@ -858,6 +858,9 @@ export interface BusinessMetadata {
   fund_admin?: string
   jurisdiction?: string
   document_type?: string
+  // Backward compatibility: these exist at root level in database
+  embeddings_skipped?: boolean
+  embeddings_error?: string
   security_scan?: {
     risk_level?: 'low' | 'medium' | 'high' | 'critical'
     scan_timestamp?: string
@@ -940,7 +943,9 @@ export interface DatabaseDocument {
   file_size: number
   content_type: string
   user_id: string
-  status: 'pending' | 'processing' | 'completed' | 'error' | 'cancelled'
+  // Status values match database schema (MASTER-DATABASE-SETUP.sql:66)
+  // CHECK constraint: ('uploading', 'queued', 'processing', 'completed', 'error', 'cancelled')
+  status: 'uploading' | 'queued' | 'processing' | 'completed' | 'error' | 'cancelled'
   extracted_fields?: Record<string, unknown>
   page_count?: number
   processing_error?: string

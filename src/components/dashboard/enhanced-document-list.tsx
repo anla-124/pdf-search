@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { Document } from '@/types'
+import { DatabaseDocument as Document } from '@/types/external-apis'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -56,6 +56,7 @@ import {
 import { format } from 'date-fns'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { clientLogger } from '@/lib/client-logger'
+import { viewDocument, downloadDocument } from '@/lib/document-actions'
 
 interface DocumentListProps {
   refreshTrigger?: number
@@ -142,7 +143,6 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
     document: null,
     isOpen: false
   })
-  const [_selectedSearchSourceDocument, _setSelectedSearchSourceDocument] = useState<Document | null>(null)
 
   // Track when we last kicked the cron endpoint so we don't spam requests
   const [lastProcessingTrigger, setLastProcessingTrigger] = useState<number>(0)
@@ -283,7 +283,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
           }
 
           if (payload.eventType === 'UPDATE' && newDoc?.id) {
-            const terminalStatuses: Document['status'][] = ['completed', 'error', 'cancelled', 'cancelling']
+            const terminalStatuses: Document['status'][] = ['completed', 'error', 'cancelled']
             if (terminalStatuses.includes(newDoc.status)) {
               setDocumentStatuses(prev => {
                 const next = new Map(prev)
@@ -378,22 +378,6 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
     }
   }
 
-  const viewPdf = async (document: Document) => {
-    try {
-      const response = await fetch(`/api/documents/${document.id}/download`)
-
-      if (!response.ok) {
-        throw new Error('Failed to load document')
-      }
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      window.open(url, '_blank')
-    } catch (error) {
-      clientLogger.error('Error viewing document:', error)
-      alert('Failed to view document. Please try again.')
-    }
-  }
 
   // Cancel processing handler
   const handleCancelProcessing = useCallback(async (documentId: string) => {
@@ -581,7 +565,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
             const message = incomingError || existingError || 'Document processing failed'
             updatedDoc.processing_error = message
           } else if ('processing_error' in updatedDoc) {
-            updatedDoc.processing_error = null
+            updatedDoc.processing_error = undefined
           }
 
           return updatedDoc
@@ -746,28 +730,6 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
     }
   }
 
-  const downloadPdf = async (document: Document) => {
-    try {
-      const response = await fetch(`/api/documents/${document.id}/download`)
-
-      if (!response.ok) {
-        throw new Error('Failed to download document')
-      }
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = window.document.createElement('a')
-      a.style.display = 'none'
-      a.href = url
-      a.download = document.filename || `${document.title}.pdf`
-      window.document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-    } catch (error) {
-      clientLogger.error('Error downloading document:', error)
-      alert('Failed to download document. Please try again.')
-    }
-  }
 
   // Sort handler for column headers
   const handleSort = (column: string) => {
@@ -890,12 +852,6 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
           icon: X,
           color: 'bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-950/50 dark:text-gray-400 dark:border-gray-800',
           label: 'Cancelled'
-        }
-      case 'cancelling':
-        return {
-          icon: X,
-          color: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/50 dark:text-orange-400 dark:border-orange-800',
-          label: 'Cancelling...'
         }
       default:
         return {
@@ -1344,7 +1300,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => viewPdf(document)}
+                                    onClick={() => viewDocument(document)}
                                     className="h-8 button-brighter"
                                   >
                                     <Eye className="h-3 w-3 mr-1" />
@@ -1412,7 +1368,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuItem
-                                    onClick={() => downloadPdf(document)}
+                                    onClick={() => downloadDocument(document)}
                                     className="flex items-center"
                                   >
                                     <Download className="h-4 w-4 mr-2" />

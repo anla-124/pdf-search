@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { clientLogger } from '@/lib/client-logger'
 
 export function GoogleAuthButton() {
   const [isLoading, setIsLoading] = useState(false)
@@ -19,10 +20,10 @@ export function GoogleAuthButton() {
         },
       })
       if (error) {
-        console.error('[GoogleAuthButton] OAuth error:', error.message || error)
+        clientLogger.error('OAuth error', error)
       }
     } catch (error) {
-      console.error('[GoogleAuthButton] Login error:', error instanceof Error ? error.message : 'Unknown error')
+      clientLogger.error('Login error', error)
     } finally {
       setIsLoading(false)
     }
@@ -84,7 +85,7 @@ export function EmailPasswordLogin() {
       }
     } catch (err) {
       setError('An error occurred during sign in')
-      console.error('[EmailPasswordLogin] Login error:', err instanceof Error ? err.message : 'Unknown error', { email })
+      clientLogger.error('Login error', { error: err, email })
     } finally {
       setIsLoading(false)
     }

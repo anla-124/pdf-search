@@ -94,7 +94,7 @@
 
   /* Enhanced sidebar styling */
   .dark .sidebar-enhanced {
-    background: linear-gradient(to bottom right, rgb(15 23 42), rgb(30 41 59)) !important;
+    background: rgb(15 23 42) !important;
     @apply border-slate-700/50;
     box-shadow:
       0 4px 6px -1px rgba(0, 0, 0, 0.3),
@@ -150,6 +150,28 @@
 
   .dark .hover\:bg-muted-darker\/80:hover {
     background-color: hsl(215 27.9% 10.1% / 0.8);
+  }
+
+  /* Buttons and inputs with better contrast in light mode */
+  .button-brighter {
+    background-color: hsl(0 0% 96%) !important;
+    border-color: hsl(0 0% 89%) !important;
+    transition: all 0.2s ease;
+  }
+
+  .button-brighter:hover {
+    background-color: hsl(0 0% 92%) !important;
+    border-color: hsl(0 0% 82%) !important;
+  }
+
+  .input-brighter {
+    background-color: hsl(0 0% 98%) !important;
+    border-color: hsl(0 0% 89%) !important;
+  }
+
+  .input-brighter:focus {
+    border-color: hsl(217.2 91.2% 59.8%) !important;
+    background-color: hsl(0 0% 100%) !important;
   }
 
   /* Buttons and inputs matching background in dark mode */

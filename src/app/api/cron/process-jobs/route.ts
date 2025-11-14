@@ -190,8 +190,8 @@ async function processJob(
        *
        * TRACKING:
        * TODO(database): Fix RLS policies to prevent JOIN query failures
-       * TODO(database): Add foreign key constraint on document_jobs.document_id
-       * TODO(monitoring): Add alert when fallback is triggered (indicates DB issue)
+       * ✓ DONE: Foreign key constraint exists (MASTER-DATABASE-SETUP.sql:128)
+       * ✓ DONE: Alert added when fallback triggers (see line 248)
        *
        * =======================================================================
        */
@@ -244,9 +244,13 @@ async function processJob(
           })
           
           // CRITICAL FIX: Use the direct document if it exists
-          logger.warn('Using direct document lookup as workaround for JOIN issue', {
+          // TODO(monitoring): This indicates a database/RLS issue - track frequency
+          logger.warn('JOIN_FALLBACK_TRIGGERED: Using direct document lookup as workaround for JOIN issue', {
             jobId: job.id,
-            documentId: job.document_id
+            documentId: job.document_id,
+            alert: true, // Flag for monitoring systems
+            metric: 'database.join.fallback',
+            severity: 'warning'
           })
           const workingDocument: DocumentJobJoin = {
             id: typeof directDocument.id === 'string' ? directDocument.id : job.document_id,

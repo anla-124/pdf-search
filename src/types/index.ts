@@ -23,7 +23,9 @@ export interface Document {
   file_path: string
   file_size: number
   content_type: string
-  status: 'uploading' | 'queued' | 'processing' | 'completed' | 'error' | 'cancelled' | 'cancelling'
+  // Status values match database schema (MASTER-DATABASE-SETUP.sql:66)
+  // CHECK constraint: ('uploading', 'queued', 'processing', 'completed', 'error', 'cancelled')
+  status: 'uploading' | 'queued' | 'processing' | 'completed' | 'error' | 'cancelled'
   processing_error?: string | null
   extracted_fields?: Record<string, unknown> // FIXED: Replaced 'any' with 'unknown'
   metadata?: DocumentMetadata
@@ -99,7 +101,9 @@ export interface SearchFilters {
 
 export interface ProcessingStatus {
   document_id: string
-  status: 'queued' | 'processing' | 'completed' | 'error' | 'cancelled' | 'cancelling'
+  // Status values match database schema (MASTER-DATABASE-SETUP.sql:116)
+  // CHECK constraint: ('queued', 'processing', 'completed', 'error', 'cancelled')
+  status: 'queued' | 'processing' | 'completed' | 'error' | 'cancelled'
   progress: number
   message?: string
   error?: string
@@ -109,7 +113,9 @@ export interface DocumentJob {
   id: string
   document_id: string
   user_id: string
-  status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'cancelling'
+  // Status values match database schema (MASTER-DATABASE-SETUP.sql:132)
+  // CHECK constraint: ('queued', 'processing', 'completed', 'error', 'cancelled')
+  status: 'queued' | 'processing' | 'completed' | 'error' | 'cancelled'
   job_type: string
   priority: number
   attempts: number

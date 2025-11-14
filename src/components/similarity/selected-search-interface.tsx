@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Document } from '@/types'
+import { DatabaseDocument as Document } from '@/types/external-apis'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +22,8 @@ import {
   GitCompare
 } from 'lucide-react'
 import { formatUploadDate } from '@/lib/date-utils'
+import { viewDocument, downloadDocument } from '@/lib/document-actions'
+import { clientLogger } from '@/lib/client-logger'
 
 interface SelectedSearchInterfaceProps {
   sourceDocument: Document | null
@@ -71,7 +73,7 @@ export function SelectedSearchInterface({ sourceDocument, autoSearchTargets }: S
         alert(`Failed to create comparison: ${data.error || 'Unknown error'}`)
       }
     } catch (error) {
-      console.error('[SelectedSearchInterface] Draftable comparison error:', error instanceof Error ? error.message : 'Unknown error', { sourceDocId: sourceDocument.id, targetDocId })
+      clientLogger.error('Draftable comparison error', { error, sourceDocId: sourceDocument.id, targetDocId })
       alert('Failed to create comparison. Please try again.')
     } finally {
       setComparingDocs(prev => {
@@ -114,7 +116,7 @@ export function SelectedSearchInterface({ sourceDocument, autoSearchTargets }: S
         const data = await response.json()
         setResults(data)
       } catch (error) {
-        console.error('[SelectedSearchInterface] Auto-search failed:', error instanceof Error ? error.message : 'Unknown error')
+        clientLogger.error('Auto-search failed', error)
       } finally {
         setIsComparing(false)
       }
@@ -205,43 +207,6 @@ export function SelectedSearchInterface({ sourceDocument, autoSearchTargets }: S
     if (score >= 0.7) return 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300'
     if (score >= 0.5) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300'
     return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300'
-  }
-
-  const downloadPdf = async (document: Document) => {
-    try {
-      const response = await fetch(`/api/documents/${document.id}/download`)
-      if (!response.ok) {
-        throw new Error('Failed to download document')
-      }
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = window.document.createElement('a')
-      link.href = url
-      link.download = document.filename
-      window.document.body.appendChild(link)
-      link.click()
-      window.document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error('[SelectedSearchInterface] Error downloading document:', error instanceof Error ? error.message : 'Unknown error', { documentId: document.id, filename: document.filename })
-      alert('Failed to download document. Please try again.')
-    }
-  }
-
-  const viewPdf = async (document: Document) => {
-    try {
-      const response = await fetch(`/api/documents/${document.id}/download`)
-      if (!response.ok) {
-        throw new Error('Failed to load document')
-      }
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      window.open(url, '_blank')
-      setTimeout(() => window.URL.revokeObjectURL(url), 1000)
-    } catch (error) {
-      console.error('[SelectedSearchInterface] Error viewing document:', error instanceof Error ? error.message : 'Unknown error', { documentId: document.id, filename: document.filename })
-      alert('Failed to open document. Please try again.')
-    }
   }
 
   const sortedResults = sortResults(results)
@@ -390,7 +355,7 @@ export function SelectedSearchInterface({ sourceDocument, autoSearchTargets }: S
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => viewPdf(result.document)}
+                            onClick={() => viewDocument(result.document)}
                           >
                             <Eye className="h-4 w-4 mr-1" />
                             View
@@ -398,7 +363,7 @@ export function SelectedSearchInterface({ sourceDocument, autoSearchTargets }: S
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => downloadPdf(result.document)}
+                            onClick={() => downloadDocument(result.document)}
                           >
                             <Download className="h-4 w-4 mr-1" />
                             Download

@@ -172,31 +172,6 @@ export function isFormOption(text: string): boolean {
 }
 
 /**
- * Detect if a paragraph looks like a footnote
- *
- * NOTE: Currently disabled because Document AI outputs plain text without formatting.
- * Superscripts (⁰¹²³⁴⁵⁶⁷⁸⁹) in PDFs are converted to regular digits (0-9) by OCR,
- * making reliable footnote detection impossible without risking false positives
- * (e.g., removing "1 The Investor is..." questionnaire items).
- *
- * Footnotes will be included in similarity matching. This is safer than accidentally
- * removing legitimate content.
- */
-export function isFootnote(text: string): boolean {
-  // Intentionally always returns false - footnote detection disabled
-  void text // Suppress unused parameter warning
-  return false
-}
-
-/**
- * Remove footnote paragraphs from the list
- * Currently a no-op since isFootnote always returns false
- */
-export function removeFootnotes(paragraphs: Paragraph[]): Paragraph[] {
-  return paragraphs.filter(para => !isFootnote(para.text))
-}
-
-/**
  * Merge form option paragraphs with their parent paragraph
  * Looks ahead and behind to handle noise paragraphs between question and options
  * IMPORTANT: Never creates paragraphs exceeding maxCharacters to prevent oversized chunks
@@ -562,6 +537,13 @@ export function splitOversizedParagraphs(paragraphs: Paragraph[], maxCharacters:
  * - All chunks respect maxCharacters limit
  * - Natural adaptation to paragraph sizes (1-N paragraphs per chunk)
  *
+ * FOOTNOTE HANDLING:
+ * Footnotes are NOT removed from chunks. Document AI's OCR processor converts
+ * PDFs to plain text without preserving superscript formatting (⁰¹²³⁴⁵⁶⁷⁸⁹ → 0123456789),
+ * making it impossible to reliably distinguish footnote "1" from section number "1"
+ * or questionnaire item "1 The Investor is...". Including footnotes is safer than
+ * risking false positives that would remove legitimate content.
+ *
  * @param paragraphs - Array of paragraphs to chunk
  * @param maxCharacters - Maximum characters per chunk (hard limit)
  * @returns Array of chunks
@@ -570,36 +552,33 @@ export function chunkByParagraphs(
   paragraphs: Paragraph[],
   maxCharacters: number = 2000
 ): Chunk[] {
-  // Step 1: Remove footnotes FIRST
-  let filtered = removeFootnotes(paragraphs)
-
-  // Step 2: Merge form options with parent paragraphs BEFORE noise filtering
+  // Step 1: Merge form options with parent paragraphs BEFORE noise filtering
   // This preserves "Yes/No/N/A" options that would otherwise be filtered as noise
-  filtered = mergeFormOptions(filtered, maxCharacters)
+  let filtered = mergeFormOptions(paragraphs, maxCharacters)
 
-  // Step 3: NOW filter out noise paragraphs (after form options are safely merged)
+  // Step 2: NOW filter out noise paragraphs (after form options are safely merged)
   filtered = filtered.filter(para => !isNoiseParagraph(para.text))
 
-  // Step 4: Strip prefixes from each paragraph (A., 1., 2.2, etc.)
+  // Step 3: Strip prefixes from each paragraph (A., 1., 2.2, etc.)
   filtered = filtered.map(para => ({
     ...para,
     text: stripPrefixes(para.text)
   }))
 
-  // Step 5: Filter out empty paragraphs (after prefix stripping)
+  // Step 4: Filter out empty paragraphs (after prefix stripping)
   filtered = filtered.filter(para => para.text.trim().length > 0)
 
-  // Step 6: Merge incomplete paragraphs (mid-sentence cuts at page boundaries)
+  // Step 5: Merge incomplete paragraphs (mid-sentence cuts at page boundaries)
   filtered = mergeIncompleteParagraphs(filtered, maxCharacters)
 
-  // Step 7: Merge tiny paragraphs with neighbors to create substantial semantic units
+  // Step 6: Merge tiny paragraphs with neighbors to create substantial semantic units
   filtered = mergeTinyParagraphs(filtered, 80, maxCharacters)
 
-  // Step 7.5: Split oversized paragraphs at sentence boundaries
+  // Step 6.5: Split oversized paragraphs at sentence boundaries
   // This guarantees no paragraph ever exceeds maxCharacters (final safety net)
   filtered = splitOversizedParagraphs(filtered, maxCharacters)
 
-  // Step 8: Group into chunks using simple greedy algorithm
+  // Step 7: Group into chunks using simple greedy algorithm
   const chunks: Chunk[] = []
   let i = 0
 

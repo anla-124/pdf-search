@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Document } from '@/types'
+import { DatabaseDocument as Document } from '@/types/external-apis'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,7 @@ import {
   GitCompare
 } from 'lucide-react'
 import { formatUploadDate } from '@/lib/date-utils'
+import { clientLogger } from '@/lib/client-logger'
 
 interface SimilarityScores {
   sourceScore: number
@@ -82,7 +83,7 @@ export function SimilarityResultsV2({ results, sourceDocument, isLoading, maxRes
         alert(`Failed to create comparison: ${data.error || 'Unknown error'}`)
       }
     } catch (error) {
-      console.error('[SimilarityResultsV2] Draftable comparison error:', error instanceof Error ? error.message : 'Unknown error', { sourceDocId: sourceDocument.id, targetDocId })
+      clientLogger.error('Draftable comparison error', { error, sourceDocId: sourceDocument.id, targetDocId })
       alert('Failed to create comparison. Please try again.')
     } finally {
       setComparingDocs(prev => {
@@ -198,7 +199,7 @@ export function SimilarityResultsV2({ results, sourceDocument, isLoading, maxRes
       window.document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
     } catch (error) {
-      console.error('[SimilarityResultsV2] Error downloading document:', error instanceof Error ? error.message : 'Unknown error', { documentId: document.id, filename: document.filename })
+      clientLogger.error('Error downloading document', { error, documentId: document.id, filename: document.filename })
       alert('Failed to download document. Please try again.')
     }
   }
@@ -220,7 +221,7 @@ export function SimilarityResultsV2({ results, sourceDocument, isLoading, maxRes
         window.URL.revokeObjectURL(url)
       }, 1000)
     } catch (error) {
-      console.error('[SimilarityResultsV2] Error viewing document:', error instanceof Error ? error.message : 'Unknown error', { documentId: document.id, filename: document.filename })
+      clientLogger.error('Error viewing document', { error, documentId: document.id, filename: document.filename })
       alert('Failed to open document. Please try again.')
     }
   }

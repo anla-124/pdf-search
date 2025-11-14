@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import type { Document as AppDocument } from '@/types'
+import type { DatabaseDocument as AppDocument } from '@/types/external-apis'
 import { DashboardLayout } from '@/components/dashboard/layout'
 import { SelectedSearchInterface } from '@/components/similarity/selected-search-interface'
 import { Button } from '@/components/ui/button'
