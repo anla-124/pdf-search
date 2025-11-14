@@ -455,13 +455,13 @@ const isMetadataComplete = (metadata: DocumentMetadata) => {
 
   return (
     <Card className="card-enhanced" data-testid="upload-form">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Upload className="h-5 w-5" />
+      <CardHeader className="px-4 pt-4 pb-2 sm:px-6 sm:pt-5 sm:pb-3">
+        <CardTitle className="flex items-center gap-2 text-xs font-semibold sm:text-sm">
+          <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
           Upload Documents
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 px-4 pb-4 pt-0 sm:space-y-4 sm:px-6 sm:pb-6">
         {error && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
@@ -486,7 +486,7 @@ const isMetadataComplete = (metadata: DocumentMetadata) => {
         )}
 
         <div
-          className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+          className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors sm:p-5 ${
             isDragOver
               ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/10'
               : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
@@ -496,8 +496,8 @@ const isMetadataComplete = (metadata: DocumentMetadata) => {
           onDrop={handleDrop}
           onClick={() => document.getElementById('file-upload')?.click()}
         >
-          <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+          <FileText className="mx-auto h-10 w-10 text-gray-400 mb-3 sm:h-12 sm:w-12 sm:mb-4" />
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1.5 sm:mb-2">
             Drop PDF files here or click to browse
           </p>
           <Input
@@ -512,7 +512,7 @@ const isMetadataComplete = (metadata: DocumentMetadata) => {
         </div>
 
         {files.length > 0 && (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium">Upload Queue</h4>
               <Button
@@ -525,9 +525,9 @@ const isMetadataComplete = (metadata: DocumentMetadata) => {
               </Button>
             </div>
             
-            <div className="space-y-4 max-h-96 overflow-y-auto">
+            <div className="space-y-3 max-h-96 overflow-y-auto">
               {files.map((uploadFile) => (
-                <div key={uploadFile.id} className={`border rounded-lg p-4 space-y-3 ${
+                <div key={uploadFile.id} className={`border rounded-lg p-3 space-y-2.5 sm:p-4 sm:space-y-3 ${
                   isMetadataComplete(uploadFile.metadata) 
                     ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20' 
                     : 'border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20'
@@ -587,7 +587,7 @@ const isMetadataComplete = (metadata: DocumentMetadata) => {
 
                   {/* Validation Issues and Warnings */}
                   {uploadFile.validation && (uploadFile.validation.issues.length > 0 || uploadFile.validation.warnings.length > 0) && (
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       {uploadFile.validation.issues.length > 0 && (
                         <Alert className="border-red-200 bg-red-50">
                           <AlertTriangle className="h-4 w-4 text-red-600" />
