@@ -1,15 +1,19 @@
 /**
  * Bidirectional Chunk Matching with Non-Max Suppression (NMS) and Tie-Breaking
  * CRITICAL: Implements proper NMS to ensure clean 1:1 chunk alignment
+ *
+ * Enhanced with Jaccard similarity filtering to reduce paraphrase false positives
  */
 
 import { logger } from '@/lib/logger'
 import { ChunkMatch, Chunk } from '../types'
 import { cosineSimilarity } from '../utils/vector-operations'
+import { jaccardSimilarity } from '../utils/jaccard-similarity'
 import { hasSufficientEvidence } from './adaptive-scoring'
 
 interface MatchingOptions {
-  primaryThreshold?: number
+  primaryThreshold?: number    // Cosine similarity threshold (default: 0.90)
+  jaccardThreshold?: number    // Jaccard similarity threshold (default: 0, disabled)
 }
 
 /**
@@ -27,15 +31,18 @@ export async function findBidirectionalMatches(
   thresholdOrOptions: number | MatchingOptions = 0.90
 ): Promise<ChunkMatch[] | null> {
 
-  const threshold = typeof thresholdOrOptions === 'number'
-    ? thresholdOrOptions
-    : thresholdOrOptions.primaryThreshold ?? 0.90
+  const options: MatchingOptions = typeof thresholdOrOptions === 'number'
+    ? { primaryThreshold: thresholdOrOptions, jaccardThreshold: 0 }
+    : {
+        primaryThreshold: thresholdOrOptions.primaryThreshold ?? 0.90,
+        jaccardThreshold: thresholdOrOptions.jaccardThreshold ?? 0
+      }
 
   // Direction A→B: For each chunk in A, find best match in B
-  const matchesAtoB = findBestMatches(chunksA, chunksB, threshold)
+  const matchesAtoB = findBestMatches(chunksA, chunksB, options)
 
   // Direction B→A: For each chunk in B, find best match in A
-  const matchesBtoA = findBestMatches(chunksB, chunksA, threshold)
+  const matchesBtoA = findBestMatches(chunksB, chunksA, options)
 
   // Merge bidirectional matches (deduplicate pairs)
   const allMatches = mergeBidirectionalMatches(matchesAtoB, matchesBtoA)
@@ -76,6 +83,10 @@ export async function findBidirectionalMatches(
  * Find best matches from source to target with NMS and tie-breaking
  * Each source chunk matches AT MOST one target chunk (NMS)
  *
+ * Filtering stages:
+ * 1. Cosine similarity threshold (semantic relevance)
+ * 2. Jaccard similarity threshold (lexical overlap, optional)
+ *
  * Tie-breaking order:
  * 1. Higher cosine similarity
  * 2. Closer page number (spatial proximity)
@@ -83,10 +94,18 @@ export async function findBidirectionalMatches(
 function findBestMatches(
   sourceChunks: Chunk[],
   targetChunks: Chunk[],
-  threshold: number
+  options: MatchingOptions
 ): Map<string, ChunkMatch> {
 
+  const cosineThreshold = options.primaryThreshold ?? 0.90
+  const jaccardThreshold = options.jaccardThreshold ?? 0
+  const jaccardEnabled = jaccardThreshold > 0
+
   const matches = new Map<string, ChunkMatch>()
+
+  // Track filtering stats for logging
+  let totalCosinePassed = 0
+  let totalJaccardFiltered = 0
 
   // Early exit optimization: If first 40 chunks yield 0 matches, bail
   let earlyMatchCount = 0
@@ -95,13 +114,31 @@ function findBestMatches(
   for (let i = 0; i < sourceChunks.length; i++) {
     const chunkA = sourceChunks[i]!
 
-    // Find all candidates above threshold
-    const candidates: Array<{ chunkB: Chunk; score: number }> = []
+    // Find all candidates above cosine threshold
+    const candidates: Array<{ chunkB: Chunk; score: number; jaccardScore: number }> = []
 
     for (const chunkB of targetChunks) {
+      // Stage 1: Cosine similarity filter (semantic relevance)
       const score = cosineSimilarity(chunkA.embedding, chunkB.embedding)
-      if (score >= threshold) {
-        candidates.push({ chunkB, score })
+      if (score < cosineThreshold) {
+        continue
+      }
+
+      totalCosinePassed++
+
+      // Stage 2: Jaccard similarity filter (lexical overlap)
+      // Only applies if threshold > 0 and both chunks have text
+      if (jaccardEnabled && chunkA.text && chunkB.text) {
+        const jaccardScore = jaccardSimilarity(chunkA.text, chunkB.text)
+
+        if (jaccardScore < jaccardThreshold) {
+          totalJaccardFiltered++
+          continue  // Filter out paraphrased chunk
+        }
+
+        candidates.push({ chunkB, score, jaccardScore })
+      } else {
+        candidates.push({ chunkB, score, jaccardScore: 0 })
       }
     }
 
@@ -149,7 +186,20 @@ function findBestMatches(
         pageNumber: bestMatch.chunkB.pageNumber,
         characterCount: bestMatch.chunkB.characterCount
       },
-      score: bestMatch.score
+      score: bestMatch.score,
+      jaccardScore: bestMatch.jaccardScore
+    })
+  }
+
+  // Log filtering stats if Jaccard was enabled
+  if (jaccardEnabled && totalJaccardFiltered > 0) {
+    logger.info('Jaccard similarity filtering applied', {
+      cosineThreshold,
+      jaccardThreshold,
+      cosinePassed: totalCosinePassed,
+      jaccardFiltered: totalJaccardFiltered,
+      finalMatches: matches.size,
+      filterRate: `${((totalJaccardFiltered / totalCosinePassed) * 100).toFixed(1)}%`
     })
   }
 
@@ -229,7 +279,7 @@ function greedySelectPairs(pairs: ChunkMatch[]): ChunkMatch[] {
 export async function batchFindMatches(
   sourceDocs: Array<{ id: string; chunks: Chunk[] }>,
   targetDocs: Array<{ id: string; chunks: Chunk[] }>,
-  threshold: number = 0.90
+  thresholdOrOptions: number | MatchingOptions = 0.90
 ): Promise<Map<string, Map<string, ChunkMatch[]>>> {
 
   const results = new Map<string, Map<string, ChunkMatch[]>>()
@@ -244,7 +294,7 @@ export async function batchFindMatches(
           const matches = await findBidirectionalMatches(
             sourceDoc.chunks,
             targetDoc.chunks,
-            threshold
+            thresholdOrOptions
           )
 
           if (matches) {

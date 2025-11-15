@@ -48,8 +48,9 @@ export async function stage2FinalScoring(
 
   const startTime = Date.now()
 
-  // Read threshold default from environment variable
+  // Read thresholds from environment variables
   const defaultThreshold = parseFloat(process.env['STAGE2_THRESHOLD'] || '0.90')
+  const defaultJaccardThreshold = parseFloat(process.env['STAGE2_JACCARD_THRESHOLD'] || '0')
 
   const {
     parallelWorkers = 28,
@@ -109,7 +110,8 @@ export async function stage2FinalScoring(
     }
 
     const matchOptions = {
-      threshold
+      threshold,
+      jaccardThreshold: defaultJaccardThreshold
     }
 
     const batchPromises = batches.map(batch =>
@@ -169,6 +171,7 @@ async function processBatch(
   sourceChunks: Chunk[],
   matchOptions: {
     threshold: number
+    jaccardThreshold: number
   },
   timeout: number,
   sourceTotalCharacters: number
@@ -222,6 +225,7 @@ async function processCandidate(
   sourceChunks: Chunk[],
   matchOptions: {
     threshold: number
+    jaccardThreshold: number
   },
   sourceTotalCharacters: number
 ): Promise<SimilarityResult | null> {
@@ -257,7 +261,8 @@ async function processCandidate(
     sourceChunks,
     candidateChunks,
     {
-      primaryThreshold: matchOptions.threshold
+      primaryThreshold: matchOptions.threshold,
+      jaccardThreshold: matchOptions.jaccardThreshold
     }
   )
 
@@ -280,6 +285,17 @@ async function processCandidate(
     sourceTotalCharacters,
     candidateTotalCharacters
   )
+
+  // 3.5. Aggregate Jaccard metrics (if available)
+  const jaccardScores = matches
+    .map(m => m.jaccardScore)
+    .filter((score): score is number => typeof score === 'number' && score > 0)
+
+  if (jaccardScores.length > 0) {
+    scores.averageJaccard = jaccardScores.reduce((sum, score) => sum + score, 0) / jaccardScores.length
+    scores.minJaccard = Math.min(...jaccardScores)
+    scores.maxJaccard = Math.max(...jaccardScores)
+  }
 
   // 4. Section detection
   const sections = groupMatchesIntoSections(matches)

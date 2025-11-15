@@ -16,7 +16,8 @@ export interface ChunkMatch {
     pageNumber: number
     characterCount: number
   }
-  score: number
+  score: number           // Cosine similarity score
+  jaccardScore?: number   // Jaccard similarity score (optional, 0 if disabled)
 }
 
 export interface SectionMatch {
@@ -33,6 +34,9 @@ export interface SimilarityScores {
   matchedSourceCharacters: number      // Absolute matched character count from source
   matchedTargetCharacters: number      // Absolute matched character count from target
   explanation: string                  // User-facing explanation
+  averageJaccard?: number              // Average Jaccard similarity across all matched chunks
+  minJaccard?: number                  // Minimum Jaccard similarity among matches
+  maxJaccard?: number                  // Maximum Jaccard similarity among matches
 }
 
 export interface SimilarityDocument {
