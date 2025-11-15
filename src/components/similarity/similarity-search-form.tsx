@@ -90,7 +90,6 @@ export function SimilaritySearchForm({ documentId, sourceDocument }: SimilarityS
           },
           stage0_topK: 600, // Stage 0: Wide centroid sweep for high recall
           stage1_topK: 250, // Stage 1: Preserve broad candidate set for Stage 2
-          stage2_fallbackThreshold: 0.8,
           source_min_score: sourceMinScore,
           target_min_score: targetMinScore,
         }),

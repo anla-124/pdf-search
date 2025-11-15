@@ -38,9 +38,7 @@ export interface SimilaritySearchOptions {
 
   // Stage 2 options
   stage2_parallelWorkers?: number   // Default: 28
-  stage2_threshold?: number         // Default: 0.85
-  stage2_fallbackThreshold?: number // Default: 0.8 (auto-clamped if > threshold)
-  stage2_fallbackEnabled?: boolean  // Default: true
+  stage2_threshold?: number         // Default: 0.90
   stage2_timeout?: number           // Default: 180000ms
 
   // Source scope options
@@ -249,6 +247,9 @@ export async function executeSimilaritySearch(
       })
     }
 
+    // Read threshold default from environment variable
+    const defaultThreshold = parseFloat(process.env['STAGE2_THRESHOLD'] || '0.90')
+
     const stage2Results = await stage2FinalScoring(
       {
         ...sourceDoc,
@@ -258,9 +259,7 @@ export async function executeSimilaritySearch(
       stage1Result.candidateIds,  // Only candidates from Stage 1!
       {
         parallelWorkers: stage2Workers,
-        threshold: options.stage2_threshold ?? 0.85,
-        fallbackThreshold: options.stage2_fallbackThreshold ?? 0.8,
-        fallbackEnabled: options.stage2_fallbackEnabled ?? true,
+        threshold: options.stage2_threshold ?? defaultThreshold,
         timeout: options.stage2_timeout ?? 180000,
         sourceChunksOverride: sourceChunks,
         sourcePageRange

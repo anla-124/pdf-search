@@ -8,19 +8,8 @@ import { ChunkMatch, Chunk } from '../types'
 import { cosineSimilarity } from '../utils/vector-operations'
 import { hasSufficientEvidence } from './adaptive-scoring'
 
-interface FallbackConfig {
-  enabled: boolean
-  threshold: number
-  topK: number
-  proximityScore: number
-  maxPageDistance: number
-  maxIndexDistance: number
-  maxLengthDifferenceRatio: number
-}
-
 interface MatchingOptions {
   primaryThreshold?: number
-  fallback?: Partial<FallbackConfig>
 }
 
 /**
@@ -29,96 +18,27 @@ interface MatchingOptions {
  *
  * @param chunksA - Source document chunks (pre-normalized embeddings)
  * @param chunksB - Target document chunks (pre-normalized embeddings)
- * @param threshold - Similarity threshold (default: 0.85)
+ * @param threshold - Similarity threshold (default: 0.90)
  * @returns Array of matched pairs, or null if insufficient evidence
  */
 export async function findBidirectionalMatches(
   chunksA: Chunk[],
   chunksB: Chunk[],
-  thresholdOrOptions: number | MatchingOptions = 0.85
+  thresholdOrOptions: number | MatchingOptions = 0.90
 ): Promise<ChunkMatch[] | null> {
 
-  const primaryThreshold = typeof thresholdOrOptions === 'number'
+  const threshold = typeof thresholdOrOptions === 'number'
     ? thresholdOrOptions
-    : thresholdOrOptions.primaryThreshold ?? 0.85
-
-  const fallbackConfig: FallbackConfig = {
-    enabled: typeof thresholdOrOptions === 'number'
-      ? true
-      : thresholdOrOptions.fallback?.enabled ?? true,
-    threshold: typeof thresholdOrOptions === 'number'
-      ? Math.max(primaryThreshold - 0.15, 0.65)
-      : thresholdOrOptions.fallback?.threshold ?? Math.max(primaryThreshold - 0.15, 0.65),
-    topK: typeof thresholdOrOptions === 'number'
-      ? 5
-      : thresholdOrOptions.fallback?.topK ?? 5,
-    proximityScore: typeof thresholdOrOptions === 'number'
-      ? 0.82
-      : thresholdOrOptions.fallback?.proximityScore ?? 0.82,
-    maxPageDistance: typeof thresholdOrOptions === 'number'
-      ? -1
-      : thresholdOrOptions.fallback?.maxPageDistance ?? -1,
-    maxIndexDistance: typeof thresholdOrOptions === 'number'
-      ? -1
-      : thresholdOrOptions.fallback?.maxIndexDistance ?? -1,
-    maxLengthDifferenceRatio: typeof thresholdOrOptions === 'number'
-      ? 0.4
-      : thresholdOrOptions.fallback?.maxLengthDifferenceRatio ?? 0.4
-  }
-
-  // Ensure fallback threshold never exceeds primary threshold
-  fallbackConfig.threshold = Math.min(fallbackConfig.threshold, primaryThreshold - 0.01)
-  if (fallbackConfig.threshold < 0.5) {
-    fallbackConfig.threshold = 0.5
-  }
+    : thresholdOrOptions.primaryThreshold ?? 0.90
 
   // Direction A→B: For each chunk in A, find best match in B
-  const matchesAtoB = findBestMatches(chunksA, chunksB, primaryThreshold)
+  const matchesAtoB = findBestMatches(chunksA, chunksB, threshold)
 
   // Direction B→A: For each chunk in B, find best match in A
-  const matchesBtoA = findBestMatches(chunksB, chunksA, primaryThreshold)
+  const matchesBtoA = findBestMatches(chunksB, chunksA, threshold)
 
   // Merge bidirectional matches (deduplicate pairs)
-  let allMatches = mergeBidirectionalMatches(matchesAtoB, matchesBtoA)
-
-  if (fallbackConfig.enabled) {
-    const primaryMatchIdsA = new Set(allMatches.map(match => match.chunkA.id))
-    const primaryMatchIdsB = new Set(allMatches.map(match => match.chunkB.id))
-
-    const unmatchedAIds = new Set<string>(
-      chunksA.filter(chunk => !primaryMatchIdsA.has(chunk.id)).map(chunk => chunk.id)
-    )
-    const unmatchedBIds = new Set<string>(
-      chunksB.filter(chunk => !primaryMatchIdsB.has(chunk.id)).map(chunk => chunk.id)
-    )
-
-    if (unmatchedAIds.size > 0 || unmatchedBIds.size > 0) {
-      const fallbackPairs = computeFallbackMatches(
-        chunksA,
-        chunksB,
-        unmatchedAIds,
-        unmatchedBIds,
-        allMatches,
-        fallbackConfig
-      )
-
-      if (fallbackPairs.length > 0) {
-        logger.info('Fallback matching recovered additional pairs', {
-          additionalPairs: fallbackPairs.length,
-          unmatchedA: unmatchedAIds.size,
-          unmatchedB: unmatchedBIds.size,
-          threshold: Number(fallbackConfig.threshold.toFixed(2))
-        })
-        allMatches = greedySelectPairs([...allMatches, ...fallbackPairs])
-      } else {
-        logger.info('Fallback matching found no additional pairs', {
-          unmatchedA: unmatchedAIds.size,
-          unmatchedB: unmatchedBIds.size,
-          threshold: Number(fallbackConfig.threshold.toFixed(2))
-        })
-      }
-    }
-  }
+  const allMatches = mergeBidirectionalMatches(matchesAtoB, matchesBtoA)
 
   // Dynamic minimum evidence filter (CRITICAL)
   // Prevents false positives from coincidental matches
@@ -302,192 +222,6 @@ function greedySelectPairs(pairs: ChunkMatch[]): ChunkMatch[] {
   return result
 }
 
-function mapChunksById(chunks: Chunk[]): Map<string, Chunk> {
-  const map = new Map<string, Chunk>()
-  for (const chunk of chunks) {
-    map.set(chunk.id, chunk)
-  }
-  return map
-}
-
-function getChunkLength(chunk: Chunk): number {
-  if (typeof chunk.text === 'string') {
-    return chunk.text.length
-  }
-  return 0
-}
-
-function computeFallbackCandidates(
-  sourceChunks: Chunk[],
-  targetChunks: Chunk[],
-  unmatchedIds: Set<string>,
-  threshold: number,
-  topK: number
-): Map<string, Array<{ chunk: Chunk; score: number }>> {
-  const candidates = new Map<string, Array<{ chunk: Chunk; score: number }>>()
-
-  for (const chunkA of sourceChunks) {
-    if (!unmatchedIds.has(chunkA.id)) {
-      continue
-    }
-
-    const potential: Array<{ chunk: Chunk; score: number }> = []
-
-    for (const chunkB of targetChunks) {
-      const score = cosineSimilarity(chunkA.embedding, chunkB.embedding)
-      if (score >= threshold) {
-        potential.push({ chunk: chunkB, score })
-      }
-    }
-
-    if (potential.length === 0) {
-      continue
-    }
-
-    potential.sort((a, b) => b.score - a.score)
-    candidates.set(chunkA.id, potential.slice(0, topK))
-  }
-
-  return candidates
-}
-
-function passesFallbackHeuristics(
-  chunkA: Chunk,
-  chunkB: Chunk,
-  scoreAtoB: number,
-  scoreBtoA: number,
-  config: FallbackConfig
-): boolean {
-  const minScore = Math.min(scoreAtoB, scoreBtoA)
-  if (minScore < config.threshold) {
-    return false
-  }
-
-  const indexDistance = Math.abs((chunkA.index ?? 0) - (chunkB.index ?? 0))
-  const pageDistance = Math.abs((chunkA.pageNumber ?? 0) - (chunkB.pageNumber ?? 0))
-
-  if (minScore < config.proximityScore) {
-    const indexFar = config.maxIndexDistance >= 0 && indexDistance > config.maxIndexDistance
-    const pageFar = config.maxPageDistance >= 0 && pageDistance > config.maxPageDistance
-    if (config.maxIndexDistance >= 0 && config.maxPageDistance >= 0) {
-      if (indexFar && pageFar) {
-        return false
-      }
-    } else if (config.maxIndexDistance >= 0 && indexFar) {
-      return false
-    } else if (config.maxPageDistance >= 0 && pageFar) {
-      return false
-    }
-  }
-
-  const lengthA = getChunkLength(chunkA)
-  const lengthB = getChunkLength(chunkB)
-  if (lengthA > 0 && lengthB > 0) {
-    const maxLength = Math.max(lengthA, lengthB)
-    const lengthDiffRatio = Math.abs(lengthA - lengthB) / maxLength
-    if (lengthDiffRatio > config.maxLengthDifferenceRatio) {
-      return false
-    }
-  }
-
-  return true
-}
-
-function computeFallbackMatches(
-  chunksA: Chunk[],
-  chunksB: Chunk[],
-  unmatchedAIds: Set<string>,
-  unmatchedBIds: Set<string>,
-  existingMatches: ChunkMatch[],
-  config: FallbackConfig
-): ChunkMatch[] {
-  if (!config.enabled) {
-    return []
-  }
-
-  const chunkAMap = mapChunksById(chunksA)
-  const chunkBMap = mapChunksById(chunksB)
-
-  const fallbackAtoB = computeFallbackCandidates(
-    chunksA,
-    chunksB,
-    unmatchedAIds,
-    config.threshold,
-    config.topK
-  )
-
-  const fallbackBtoA = computeFallbackCandidates(
-    chunksB,
-    chunksA,
-    unmatchedBIds,
-    config.threshold,
-    config.topK
-  )
-
-  const alreadyMatchedA = new Set(existingMatches.map(match => match.chunkA.id))
-  const alreadyMatchedB = new Set(existingMatches.map(match => match.chunkB.id))
-
-  const fallbackPairs: ChunkMatch[] = []
-
-  for (const [chunkAId, candidates] of fallbackAtoB.entries()) {
-    if (alreadyMatchedA.has(chunkAId)) {
-      continue
-    }
-
-    for (const candidate of candidates) {
-      const chunkBId = candidate.chunk.id
-
-      if (alreadyMatchedB.has(chunkBId)) {
-        continue
-      }
-
-      const reciprocalList = fallbackBtoA.get(chunkBId)
-      if (!reciprocalList) {
-        continue
-      }
-
-      const reciprocal = reciprocalList.find(entry => entry.chunk.id === chunkAId)
-      if (!reciprocal) {
-        continue
-      }
-
-      const chunkA = chunkAMap.get(chunkAId)
-      const chunkB = chunkBMap.get(chunkBId)
-      if (!chunkA || !chunkB) {
-        continue
-      }
-
-      if (!passesFallbackHeuristics(chunkA, chunkB, candidate.score, reciprocal.score, config)) {
-        continue
-      }
-
-      const pairScore = (candidate.score + reciprocal.score) / 2
-
-      fallbackPairs.push({
-        chunkA: {
-          id: chunkA.id,
-          index: chunkA.index,
-          pageNumber: chunkA.pageNumber,
-          characterCount: chunkA.characterCount
-        },
-        chunkB: {
-          id: chunkB.id,
-          index: chunkB.index,
-          pageNumber: chunkB.pageNumber,
-          characterCount: chunkB.characterCount
-        },
-        score: pairScore
-      })
-
-      alreadyMatchedA.add(chunkAId)
-      alreadyMatchedB.add(chunkBId)
-      break
-    }
-  }
-
-  return fallbackPairs
-}
-
 /**
  * Batch version for parallel processing
  * Process multiple source documents against multiple targets
@@ -495,7 +229,7 @@ function computeFallbackMatches(
 export async function batchFindMatches(
   sourceDocs: Array<{ id: string; chunks: Chunk[] }>,
   targetDocs: Array<{ id: string; chunks: Chunk[] }>,
-  threshold: number = 0.85
+  threshold: number = 0.90
 ): Promise<Map<string, Map<string, ChunkMatch[]>>> {
 
   const results = new Map<string, Map<string, ChunkMatch[]>>()

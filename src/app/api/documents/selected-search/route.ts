@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
       },
       stage1_topK: 250,
       stage1_enabled: true,
-      stage2_fallbackThreshold: 0.8,
+      // stage2_fallbackThreshold removed - will use env var default (0.92)
       stage2_parallelWorkers: STAGE2_WORKERS_FALLBACK
     })
 

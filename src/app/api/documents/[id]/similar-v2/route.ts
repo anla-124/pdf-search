@@ -222,7 +222,6 @@ export async function POST(
       stage1_enabled = true,
       stage1_neighborsPerChunk,
       stage2_parallelWorkers = STAGE2_WORKERS_FALLBACK,
-      stage2_fallbackThreshold = 0.8,
       filters: rawFilters = {},
       source_min_score = 0.7,
       target_min_score = 0.7
@@ -232,7 +231,6 @@ export async function POST(
       stage1_enabled?: boolean
       stage1_neighborsPerChunk?: number
       stage2_parallelWorkers?: number
-      stage2_fallbackThreshold?: number
       filters?: Record<string, unknown>
       source_min_score?: number
       target_min_score?: number
@@ -323,7 +321,6 @@ export async function POST(
       stage1_enabled,
       stage1_neighborsPerChunk,
       stage2_parallelWorkers: normalizedStage2Workers,
-      stage2_fallbackThreshold,
       sourcePageRange: sanitizedPageRange
     })
 
@@ -402,7 +399,6 @@ export async function POST(
         stage1_enabled,
         stage1_neighborsPerChunk,
         stage2_parallelWorkers: normalizedStage2Workers,
-        stage2_fallbackThreshold,
         filters: {
           ...appliedFilters,
           ...(pageRangeConfig ? { page_range: pageRangeConfig } : {}),

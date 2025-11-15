@@ -37,8 +37,6 @@ export async function stage2FinalScoring(
   options: {
     parallelWorkers?: number
     threshold?: number
-    fallbackThreshold?: number
-    fallbackEnabled?: boolean
     timeout?: number
     sourceChunksOverride?: Chunk[]
     sourcePageRange?: {
@@ -49,11 +47,13 @@ export async function stage2FinalScoring(
 ): Promise<SimilarityResult[]> {
 
   const startTime = Date.now()
+
+  // Read threshold default from environment variable
+  const defaultThreshold = parseFloat(process.env['STAGE2_THRESHOLD'] || '0.90')
+
   const {
     parallelWorkers = 28,
-    threshold = 0.85,
-    fallbackThreshold = 0.8,
-    fallbackEnabled = true,
+    threshold = defaultThreshold,
     timeout = 180000
   } = options
 
@@ -109,9 +109,7 @@ export async function stage2FinalScoring(
     }
 
     const matchOptions = {
-      threshold,
-      fallbackThreshold,
-      fallbackEnabled
+      threshold
     }
 
     const batchPromises = batches.map(batch =>
@@ -171,8 +169,6 @@ async function processBatch(
   sourceChunks: Chunk[],
   matchOptions: {
     threshold: number
-    fallbackThreshold?: number
-    fallbackEnabled: boolean
   },
   timeout: number,
   sourceTotalCharacters: number
@@ -226,8 +222,6 @@ async function processCandidate(
   sourceChunks: Chunk[],
   matchOptions: {
     threshold: number
-    fallbackThreshold?: number
-    fallbackEnabled: boolean
   },
   sourceTotalCharacters: number
 ): Promise<SimilarityResult | null> {
@@ -259,16 +253,11 @@ async function processCandidate(
   })
 
   // 2. Bidirectional matching with NMS and minimum evidence filter
-  const fallbackOptions = matchOptions.fallbackThreshold !== undefined
-    ? { enabled: matchOptions.fallbackEnabled, threshold: matchOptions.fallbackThreshold }
-    : { enabled: matchOptions.fallbackEnabled }
-
   const matches = await findBidirectionalMatches(
     sourceChunks,
     candidateChunks,
     {
-      primaryThreshold: matchOptions.threshold,
-      fallback: fallbackOptions
+      primaryThreshold: matchOptions.threshold
     }
   )
 
