@@ -1,19 +1,19 @@
 # PDF SEARCHER - NON-FUNCTIONAL TEST CASES
 
-**Version:** 1.0
-**Date:** November 24, 2025
-**Total Test Cases:** 95
+**Version:** 1.1
+**Date:** November 25, 2025
+**Total Test Cases:** 104
 
 ---
 
 ## TABLE OF CONTENTS
-1. [Performance Testing](#1-performance-testing-40-test-cases)
-2. [Security Testing](#2-security-testing-35-test-cases)
-3. [Reliability & Resilience Testing](#3-reliability--resilience-testing-20-test-cases)
+1. [Performance Testing](#1-performance-testing-42-test-cases)
+2. [Security Testing](#2-security-testing-36-test-cases)
+3. [Reliability & Resilience Testing](#3-reliability--resilience-testing-26-test-cases)
 
 ---
 
-## 1. PERFORMANCE TESTING (40 Test Cases)
+## 1. PERFORMANCE TESTING (42 Test Cases)
 
 ### 1.1 Load Testing (15 Test Cases)
 
@@ -502,9 +502,39 @@
 
 ---
 
-## 2. SECURITY TESTING (35 Test Cases)
+### 1.5 Throttling Performance (2 Test Cases)
 
-### 2.1 Authentication & Authorization (10 Test Cases)
+#### TC-PERF-041: Upload Throttling Performance
+**Priority:** P1
+**Test Steps:**
+1. Mix of throttled and non-throttled upload requests
+2. Monitor response times for both
+
+**Expected Results:**
+- Throttling doesn't degrade non-throttled requests
+- 429 responses returned immediately
+- Non-throttled requests maintain normal performance
+- Rate limiting overhead <10ms
+
+---
+
+#### TC-PERF-042: Delete Throttling Performance
+**Priority:** P1
+**Test Steps:**
+1. Exceed delete rate limit
+2. Measure 429 response time
+
+**Expected Results:**
+- 429 response time <100ms
+- Rate limit check efficient
+- No impact on other operations
+- Proper Retry-After headers
+
+---
+
+## 2. SECURITY TESTING (36 Test Cases)
+
+### 2.1 Authentication & Authorization (8 Test Cases)
 
 #### TC-SEC-001: Brute Force Login Protection
 **Priority:** P1
@@ -603,24 +633,7 @@
 
 ---
 
-#### TC-SEC-009: Concurrent Session Limit (if implemented)
-**Priority:** P3
-**Expected Results:**
-- Max 5 active sessions per user
-- Oldest session invalidated when limit exceeded
-
----
-
-#### TC-SEC-010: Multi-Factor Authentication Bypass (if implemented)
-**Priority:** P1
-**Expected Results:**
-- Cannot bypass MFA
-- Code required every time
-- Invalid code rejected
-
----
-
-### 2.2 Input Validation & Injection (10 Test Cases)
+### 2.2 Input Validation & API Security (18 Test Cases)
 
 #### TC-SEC-011: SQL Injection - Document Title
 **Priority:** P0
@@ -731,6 +744,120 @@
 
 ---
 
+#### TC-SEC-036: Upload Throttling Enforcement
+**Priority:** P1
+**Test Steps:**
+1. Exceed upload rate limit (2 per minute)
+2. Verify 429 response
+
+**Expected Results:**
+- 429 Too Many Requests returned
+- Retry-After header present
+- Rate limit enforced correctly
+- Clear error message
+
+---
+
+#### TC-SEC-037: Delete Throttling Enforcement
+**Priority:** P1
+**Test Steps:**
+1. Exceed delete rate limit (2 concurrent)
+2. Verify 429 response
+
+**Expected Results:**
+- 429 Too Many Requests returned
+- Concurrent delete limit enforced
+- Retry-After header present
+- Queue management proper
+
+---
+
+#### TC-SEC-038: Metadata JSON Validation
+**Priority:** P1
+**Test Steps:**
+1. Upload document with malformed JSON metadata
+2. Example: `{"lawFirm": "Test", invalid}`
+
+**Expected Results:**
+- 400 Bad Request returned
+- Clear validation error message
+- Request rejected before processing
+- No data corruption
+
+---
+
+#### TC-SEC-039: Metadata Type Validation
+**Priority:** P1
+**Test Steps:**
+1. Upload document with non-object metadata
+2. Example: metadata as array `["value1", "value2"]`
+
+**Expected Results:**
+- 400 Bad Request returned
+- Error message specifies type requirement
+- Only object metadata accepted
+- Request rejected
+
+---
+
+#### TC-SEC-040: Pagination Parameter Validation
+**Priority:** P1
+**Test Steps:**
+1. Request documents with negative page: `?page=-1`
+2. Request with invalid limit: `?limit=999999`
+3. Request with non-numeric values: `?page=abc`
+
+**Expected Results:**
+- 400 Bad Request for invalid parameters
+- Negative values rejected
+- Limits enforced (max: 100)
+- Non-numeric values rejected
+- Default pagination used on error
+
+---
+
+#### TC-SEC-041: CRON_SECRET Missing
+**Priority:** P1
+**Test Steps:**
+1. Call cron endpoint without Authorization header
+2. Example: `POST /api/cron/process-jobs`
+
+**Expected Results:**
+- 401 Unauthorized returned
+- Error message: "Missing authorization"
+- Cron job does not execute
+- Security event logged
+
+---
+
+#### TC-SEC-042: CRON_SECRET Invalid
+**Priority:** P1
+**Test Steps:**
+1. Call cron endpoint with incorrect Bearer token
+2. Example: `Authorization: Bearer wrong-secret`
+
+**Expected Results:**
+- 401 Unauthorized returned
+- Error message: "Invalid credentials"
+- Cron job does not execute
+- Failed attempt logged
+
+---
+
+#### TC-SEC-043: CRON_SECRET Valid
+**Priority:** P1
+**Test Steps:**
+1. Call cron endpoint with correct Bearer token
+2. Example: `Authorization: Bearer {CRON_SECRET}`
+
+**Expected Results:**
+- 200 OK returned
+- Cron job executes successfully
+- Job processing starts
+- Success logged
+
+---
+
 ### 2.3 Data Protection & Privacy (10 Test Cases)
 
 #### TC-SEC-021: Data Encryption at Rest
@@ -833,61 +960,7 @@
 
 ---
 
-### 2.4 API & Network Security (5 Test Cases)
-
-#### TC-SEC-031: CORS Policy Enforcement
-**Priority:** P1
-**Test Steps:**
-1. Make API request from unauthorized origin
-
-**Expected Results:**
-- CORS policy blocks request
-- Only whitelisted origins allowed
-
----
-
-#### TC-SEC-032: CSRF Protection
-**Priority:** P1
-**Test Steps:**
-1. Submit form from external site
-
-**Expected Results:**
-- CSRF token validation fails
-- Request rejected
-
----
-
-#### TC-SEC-033: Rate Limiting Enforcement
-**Priority:** P1
-**Test Steps:**
-1. Exceed rate limits on all endpoints
-
-**Expected Results:**
-- 429 Too Many Requests
-- Rate limit headers returned
-- Retry-After header present
-
----
-
-#### TC-SEC-034: DDoS Protection (if applicable)
-**Priority:** P2
-**Expected Results:**
-- Cloudflare or similar protection active
-- Abnormal traffic blocked
-- Legitimate traffic unaffected
-
----
-
-#### TC-SEC-035: API Versioning & Deprecation
-**Priority:** P3
-**Expected Results:**
-- Clear versioning (/api/v1)
-- Deprecated endpoints return warnings
-- Breaking changes communicated
-
----
-
-## 3. RELIABILITY & RESILIENCE TESTING (20 Test Cases)
+## 3. RELIABILITY & RESILIENCE TESTING (26 Test Cases)
 
 ### 3.1 Error Handling & Recovery (10 Test Cases)
 
@@ -1152,6 +1225,97 @@
 
 ---
 
+### 3.4 Background Workers (6 Test Cases)
+
+#### TC-REL-021: Qdrant Cleanup Worker
+**Priority:** P1
+**Test Steps:**
+1. Delete multiple documents
+2. Monitor background cleanup queue
+3. Verify cleanup completes
+
+**Expected Results:**
+- Delete operations queue cleanup without blocking API
+- API returns success immediately
+- Background worker processes delete queue
+- Qdrant vectors removed asynchronously
+- No user-facing delays
+
+---
+
+#### TC-REL-022: Qdrant Cleanup Failures
+**Priority:** P1
+**Test Steps:**
+1. Simulate Qdrant unavailable during cleanup
+2. Monitor failure handling and logging
+
+**Expected Results:**
+- Cleanup failures logged with details
+- Failures don't block document delete operation
+- Delete appears successful to user
+- Retry mechanism for failed cleanups
+- Eventual consistency maintained
+
+---
+
+#### TC-REL-023: Auto-Cron Trigger
+**Priority:** P1
+**Test Steps:**
+1. Upload document (queue processing job)
+2. Monitor for automatic cron trigger
+3. Verify processing starts
+
+**Expected Results:**
+- Upload triggers cron endpoint automatically
+- Job moves from queued to processing
+- No manual cron invocation needed
+- Proper CRON_SECRET used in auto-trigger
+- Processing starts within expected timeframe
+
+---
+
+#### TC-REL-024: Background Worker Concurrency
+**Priority:** P2
+**Test Steps:**
+1. Queue multiple cleanup operations
+2. Monitor concurrent worker execution
+
+**Expected Results:**
+- Multiple cleanup operations process in parallel
+- Worker pool managed efficiently
+- No race conditions
+- All cleanups eventually complete
+
+---
+
+#### TC-REL-025: Background Worker Error Recovery
+**Priority:** P1
+**Test Steps:**
+1. Cause intermittent failures in background worker
+2. Monitor recovery behavior
+
+**Expected Results:**
+- Failed operations retry with backoff
+- Successful operations not affected
+- Error logging comprehensive
+- System recovers automatically
+
+---
+
+#### TC-REL-026: Background Worker Queue Management
+**Priority:** P2
+**Test Steps:**
+1. Generate large volume of cleanup operations
+2. Monitor queue depth and processing
+
+**Expected Results:**
+- Queue doesn't grow unbounded
+- FIFO processing maintained
+- Memory usage reasonable
+- System remains responsive
+
+---
+
 ## TEST SUMMARY BY CATEGORY
 
 | Category | Test Cases | P0 | P1 | P2 | P3 |
@@ -1160,14 +1324,15 @@
 | Performance - Stress | 10 | 0 | 5 | 4 | 1 |
 | Performance - Scalability | 10 | 0 | 2 | 5 | 3 |
 | Performance - Resources | 5 | 0 | 1 | 4 | 0 |
-| Security - Auth | 10 | 3 | 5 | 1 | 1 |
-| Security - Injection | 10 | 2 | 6 | 2 | 0 |
+| Performance - Throttling | 2 | 0 | 2 | 0 | 0 |
+| Security - Auth | 8 | 3 | 5 | 0 | 0 |
+| Security - Input/API | 18 | 2 | 13 | 3 | 0 |
 | Security - Data Protection | 10 | 1 | 6 | 2 | 1 |
-| Security - API/Network | 5 | 0 | 3 | 1 | 1 |
 | Reliability - Error Handling | 10 | 0 | 9 | 1 | 0 |
 | Reliability - Data Integrity | 5 | 0 | 4 | 1 | 0 |
 | Reliability - Recovery | 5 | 1 | 3 | 1 | 0 |
-| **TOTAL** | **95** | **7** | **52** | **28** | **8** |
+| Reliability - Background Workers | 6 | 0 | 4 | 2 | 0 |
+| **TOTAL** | **104** | **7** | **62** | **29** | **6** |
 
 ---
 

@@ -1,24 +1,24 @@
 # PDF SEARCHER - FUNCTIONAL TEST CASES
 
-**Version:** 1.0
-**Date:** November 24, 2025
-**Total Test Cases:** 145
+**Version:** 1.1
+**Date:** November 25, 2025
+**Total Test Cases:** 157
 
 ---
 
 ## TABLE OF CONTENTS
-1. [Document Upload](#1-document-upload-20-test-cases)
-2. [Document Processing Pipeline](#2-document-processing-pipeline-15-test-cases)
-3. [Document List & Management](#3-document-list--management-25-test-cases)
-4. [Similarity Search - General](#4-similarity-search---general-25-test-cases)
-5. [Similarity Search - Selected](#5-similarity-search---selected-10-test-cases)
+1. [Document Upload](#1-document-upload-26-test-cases)
+2. [Document Processing Pipeline](#2-document-processing-pipeline-16-test-cases)
+3. [Document List & Management](#3-document-list--management-27-test-cases)
+4. [Similarity Search - General](#4-similarity-search---general-23-test-cases)
+5. [Similarity Search - Selected](#5-similarity-search---selected-12-test-cases)
 6. [Document Comparison (Draftable)](#6-document-comparison-draftable-10-test-cases)
-7. [Authentication & Authorization](#7-authentication--authorization-30-test-cases)
-8. [Health & Monitoring](#8-health--monitoring-10-test-cases)
+7. [Authentication & Authorization](#7-authentication--authorization-25-test-cases)
+8. [Health & Monitoring](#8-health--monitoring-18-test-cases)
 
 ---
 
-## 1. DOCUMENT UPLOAD (20 Test Cases)
+## 1. DOCUMENT UPLOAD (26 Test Cases)
 
 ### TC-UP-001: Upload Single Small PDF
 **Priority:** P0
@@ -167,23 +167,82 @@
 
 ---
 
-### TC-UP-009: Rate Limiting - Upload (Free Tier)
+### TC-UP-009: Upload with Malformed JSON Metadata
 **Priority:** P1
-**Preconditions:** Free tier account, MAX_CONCURRENT_DOCUMENTS=1
 **Test Steps:**
-1. Upload 3 documents simultaneously
+1. Attempt to upload with malformed JSON metadata payload
 
 **Expected Results:**
-- First upload proceeds
-- Second and third uploads queued or rejected with "Rate limit exceeded" (429)
-- Uploads proceed serially
+- Upload rejected
+- Error: "Invalid metadata format"
+- No file stored
 
 **Actual Result:** _____
 **Status:** _____
 
 ---
 
-### TC-UP-010: Concurrent Upload from Multiple Users
+### TC-UP-010: Upload with Array Metadata (Invalid Type)
+**Priority:** P1
+**Test Steps:**
+1. Attempt to upload with metadata as array instead of object
+
+**Expected Results:**
+- Upload rejected
+- Error: "Metadata must be an object"
+- No file stored
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-UP-011: Upload with Non-Object Metadata Payload
+**Priority:** P1
+**Test Steps:**
+1. Attempt to upload with metadata as string or number
+
+**Expected Results:**
+- Upload rejected
+- Error: "Metadata must be an object"
+- No file stored
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-UP-012: Rate Limiting - Multiple Rapid Uploads Triggering 429
+**Priority:** P1
+**Test Steps:**
+1. Upload 10 documents in rapid succession
+
+**Expected Results:**
+- Throttle kicks in after limit exceeded
+- 429 response returned for throttled requests
+- Error message displayed
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-UP-013: Throttled Upload Error Message
+**Priority:** P1
+**Test Steps:**
+1. Trigger upload throttling
+2. Check error message
+
+**Expected Results:**
+- Clear error message: "Upload rate limit exceeded. Please try again later."
+- Retry suggested
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-UP-014: Concurrent Upload from Multiple Users
 **Priority:** P2
 **Test Steps:**
 1. User A uploads document
@@ -199,7 +258,7 @@
 
 ---
 
-### TC-UP-011: Upload with Very Long Filename (255+ chars)
+### TC-UP-015: Upload with Very Long Filename (255+ chars)
 **Priority:** P3
 **Test Steps:**
 1. Rename PDF to have 260-character filename
@@ -214,7 +273,7 @@
 
 ---
 
-### TC-UP-012: Upload Duplicate Document
+### TC-UP-016: Upload Duplicate Document
 **Priority:** P2
 **Test Steps:**
 1. Upload "Contract.pdf"
@@ -230,7 +289,7 @@
 
 ---
 
-### TC-UP-013: Cancel Upload Mid-Transfer
+### TC-UP-017: Cancel Upload Mid-Transfer
 **Priority:** P2
 **Test Steps:**
 1. Start uploading large file (20 MB)
@@ -246,7 +305,7 @@
 
 ---
 
-### TC-UP-014: Upload with Network Interruption
+### TC-UP-018: Upload with Network Interruption
 **Priority:** P2
 **Test Steps:**
 1. Start upload
@@ -263,7 +322,7 @@
 
 ---
 
-### TC-UP-015: Upload - Drag and Drop Interface
+### TC-UP-019: Upload - Drag and Drop Interface
 **Priority:** P2
 **Test Steps:**
 1. Drag PDF file from desktop
@@ -279,7 +338,7 @@
 
 ---
 
-### TC-UP-016: Upload - Multiple Files Drag and Drop
+### TC-UP-020: Upload - Multiple Files Drag and Drop
 **Priority:** P2
 **Test Steps:**
 1. Select 5 PDFs
@@ -295,7 +354,7 @@
 
 ---
 
-### TC-UP-017: Upload Encrypted/Password-Protected PDF
+### TC-UP-021: Upload Encrypted/Password-Protected PDF
 **Priority:** P2
 **Test Steps:**
 1. Upload password-protected PDF
@@ -310,7 +369,7 @@
 
 ---
 
-### TC-UP-018: Upload Corrupted PDF
+### TC-UP-022: Upload Corrupted PDF
 **Priority:** P2
 **Test Steps:**
 1. Upload corrupted/malformed PDF file
@@ -325,7 +384,7 @@
 
 ---
 
-### TC-UP-019: Upload Scanned PDF (Image-Based)
+### TC-UP-023: Upload Scanned PDF (Image-Based)
 **Priority:** P1
 **Test Steps:**
 1. Upload scanned document (images only, no text layer)
@@ -341,7 +400,7 @@
 
 ---
 
-### TC-UP-020: Upload Native PDF (Text-Based)
+### TC-UP-024: Upload Native PDF (Text-Based)
 **Priority:** P1
 **Test Steps:**
 1. Upload native PDF with text layer
@@ -357,9 +416,41 @@
 
 ---
 
-## 2. DOCUMENT PROCESSING PIPELINE (15 Test Cases)
+### TC-UP-025: Auto-Cron Trigger on Queued Upload
+**Priority:** P1
+**Test Steps:**
+1. Upload document
+2. Monitor cron endpoint calls
 
-### TC-PROC-001: End-to-End Processing - Small Document
+**Expected Results:**
+- Upload triggers cron processing once
+- Job processing begins automatically
+- No manual intervention needed
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-UP-026: Upload Triggers Cron Only Once
+**Priority:** P1
+**Test Steps:**
+1. Upload document
+2. Verify cron not called multiple times
+
+**Expected Results:**
+- Single cron call per upload
+- No duplicate processing triggers
+- Efficient job handling
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+## 2. DOCUMENT PROCESSING PIPELINE (16 Test Cases)
+
+### TC-PP-001: End-to-End Processing - Small Document
 **Priority:** P0
 **Preconditions:** User uploaded 5-page PDF
 **Test Steps:**
@@ -377,7 +468,7 @@
 
 ---
 
-### TC-PROC-002: End-to-End Processing - Large Document (100+ pages)
+### TC-PP-002: End-to-End Processing - Large Document (100+ pages)
 **Priority:** P1
 **Test Steps:**
 1. Upload 100-page PDF (10 MB)
@@ -394,7 +485,7 @@
 
 ---
 
-### TC-PROC-003: Processing - Very Large Document (200+ pages)
+### TC-PP-003: Processing - Very Large Document (200+ pages)
 **Priority:** P1
 **Test Steps:**
 1. Upload 250-page PDF (25 MB)
@@ -410,7 +501,7 @@
 
 ---
 
-### TC-PROC-004: Processing - Document at 50 MB Limit
+### TC-PP-004: Processing - Document at 50 MB Limit
 **Priority:** P1
 **Test Steps:**
 1. Upload 49.5 MB PDF
@@ -425,7 +516,7 @@
 
 ---
 
-### TC-PROC-005: Cancel Processing - Early Stage
+### TC-PP-005: Cancel Processing - Early Stage
 **Priority:** P1
 **Test Steps:**
 1. Upload document
@@ -442,7 +533,7 @@
 
 ---
 
-### TC-PROC-006: Cancel Processing - During Embedding Generation
+### TC-PP-006: Cancel Processing - During Embedding Generation
 **Priority:** P1
 **Test Steps:**
 1. Upload document
@@ -459,7 +550,7 @@
 
 ---
 
-### TC-PROC-007: Retry Failed Processing
+### TC-PP-007: Retry Failed Processing
 **Priority:** P1
 **Preconditions:** Document failed processing
 **Test Steps:**
@@ -476,7 +567,7 @@
 
 ---
 
-### TC-PROC-008: Max Retry Attempts Exhausted
+### TC-PP-008: Max Retry Attempts Exhausted
 **Priority:** P1
 **Test Steps:**
 1. Cause processing to fail
@@ -493,7 +584,7 @@
 
 ---
 
-### TC-PROC-009: Processing Timeout (30 min)
+### TC-PP-009: Processing Timeout (30 min)
 **Priority:** P1
 **Test Steps:**
 1. Upload document that takes >30 minutes
@@ -510,7 +601,7 @@
 
 ---
 
-### TC-PROC-010: Concurrent Processing - 3 Documents
+### TC-PP-010: Concurrent Processing - 3 Documents
 **Priority:** P0
 **Preconditions:** Paid tier, MAX_CONCURRENT_DOCUMENTS=10
 **Test Steps:**
@@ -528,7 +619,7 @@
 
 ---
 
-### TC-PROC-011: Concurrent Processing - 10 Documents (Paid Tier)
+### TC-PP-011: Concurrent Processing - 10 Documents (Paid Tier)
 **Priority:** P1
 **Test Steps:**
 1. Upload 10 documents at once
@@ -544,7 +635,7 @@
 
 ---
 
-### TC-PROC-012: Processing - Document AI OCR Accuracy
+### TC-PP-012: Processing - Document AI OCR Accuracy
 **Priority:** P2
 **Test Steps:**
 1. Upload known document with measurable text
@@ -560,7 +651,7 @@
 
 ---
 
-### TC-PROC-013: Processing - Chunk Count Accuracy
+### TC-PP-013: Processing - Chunk Count Accuracy
 **Priority:** P2
 **Test Steps:**
 1. Upload 20-page document
@@ -577,7 +668,7 @@
 
 ---
 
-### TC-PROC-014: Processing - Centroid Computation
+### TC-PP-014: Processing - Centroid Computation
 **Priority:** P2
 **Test Steps:**
 1. Upload document
@@ -593,7 +684,7 @@
 
 ---
 
-### TC-PROC-015: Processing - Complex Layout (Tables, Columns)
+### TC-PP-015: Processing - Complex Layout (Tables, Columns)
 **Priority:** P2
 **Test Steps:**
 1. Upload PDF with multi-column layout and tables
@@ -608,9 +699,25 @@
 
 ---
 
-## 3. DOCUMENT LIST & MANAGEMENT (25 Test Cases)
+### TC-PP-016: Auto-Cron Trigger Verification
+**Priority:** P1
+**Test Steps:**
+1. Upload document
+2. Verify cron processing triggered automatically
 
-### TC-LIST-001: View Document List - Empty State
+**Expected Results:**
+- Queued upload triggers cron processing once
+- Job begins processing without manual trigger
+- Efficient automatic workflow
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+## 3. DOCUMENT LIST & MANAGEMENT (27 Test Cases)
+
+### TC-DL-001: View Document List - Empty State
 **Priority:** P2
 **Preconditions:** New user, no documents
 **Test Steps:**
@@ -626,7 +733,7 @@
 
 ---
 
-### TC-LIST-002: View Document List - With Documents
+### TC-DL-002: View Document List - With Documents
 **Priority:** P0
 **Preconditions:** User has 5 uploaded documents
 **Test Steps:**
@@ -643,7 +750,7 @@
 
 ---
 
-### TC-LIST-003: Pagination - Navigate Pages
+### TC-DL-003: Pagination - Navigate Pages
 **Priority:** P1
 **Preconditions:** User has 25 documents (10 per page)
 **Test Steps:**
@@ -663,7 +770,52 @@
 
 ---
 
-### TC-LIST-004: Search Documents by Title
+### TC-DL-004: Pagination - Negative Page Number
+**Priority:** P1
+**Test Steps:**
+1. Request page -1 via API or URL manipulation
+
+**Expected Results:**
+- 400 Bad Request response
+- Error: "Invalid page number"
+- No data returned
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-DL-005: Pagination - Limit Exceeding Maximum
+**Priority:** P1
+**Test Steps:**
+1. Request limit=1000 (exceeds max allowed)
+
+**Expected Results:**
+- 400 Bad Request response
+- Error: "Limit exceeds maximum allowed"
+- No data returned
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-DL-006: Pagination - Invalid Sort Parameter
+**Priority:** P1
+**Test Steps:**
+1. Request with invalid sort parameter
+
+**Expected Results:**
+- 400 Bad Request response
+- Error: "Invalid sort parameter"
+- No data returned
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-DL-007: Search Documents by Title
 **Priority:** P1
 **Test Steps:**
 1. Type "Contract" in search box
@@ -680,7 +832,7 @@
 
 ---
 
-### TC-LIST-005: Filter by Status - Completed
+### TC-DL-008: Filter by Status - Completed
 **Priority:** P1
 **Test Steps:**
 1. Select "Completed" from status filter dropdown
@@ -695,7 +847,7 @@
 
 ---
 
-### TC-LIST-006: Filter by Status - Processing
+### TC-DL-009: Filter by Status - Processing
 **Priority:** P1
 **Test Steps:**
 1. Select "Processing" status filter
@@ -710,7 +862,7 @@
 
 ---
 
-### TC-LIST-007: Filter by Status - Failed
+### TC-DL-010: Filter by Status - Failed
 **Priority:** P1
 **Test Steps:**
 1. Select "Failed" status filter
@@ -725,7 +877,7 @@
 
 ---
 
-### TC-LIST-008: Filter by Metadata - Law Firm
+### TC-DL-011: Filter by Metadata - Law Firm
 **Priority:** P2
 **Test Steps:**
 1. Select "Smith & Associates" from Law Firm filter
@@ -740,7 +892,7 @@
 
 ---
 
-### TC-LIST-009: Combined Filters - Status + Metadata
+### TC-DL-012: Combined Filters - Status + Metadata
 **Priority:** P2
 **Test Steps:**
 1. Filter by Status: "Completed"
@@ -756,7 +908,7 @@
 
 ---
 
-### TC-LIST-010: Sort by Title (A-Z)
+### TC-DL-013: Sort by Title (A-Z)
 **Priority:** P2
 **Test Steps:**
 1. Click "Title" column header
@@ -771,7 +923,7 @@
 
 ---
 
-### TC-LIST-011: Sort by Date Created
+### TC-DL-014: Sort by Date Created
 **Priority:** P2
 **Test Steps:**
 1. Click "Date" column header
@@ -786,7 +938,7 @@
 
 ---
 
-### TC-LIST-012: Sort by Page Count
+### TC-DL-015: Sort by Page Count
 **Priority:** P3
 **Test Steps:**
 1. Click "Pages" column header
@@ -800,7 +952,7 @@
 
 ---
 
-### TC-LIST-013: Rename Document
+### TC-DL-016: Rename Document
 **Priority:** P1
 **Test Steps:**
 1. Click "Edit" on document
@@ -809,8 +961,8 @@
 
 **Expected Results:**
 - Title updated in database
-- Filename in storage updated
-- Storage path updated (user_id/new-filename.pdf)
+- Filename in storage updated (file moved to new path)
+- Qdrant metadata updated with new filename
 - Change reflected immediately in list
 
 **Actual Result:** _____
@@ -818,7 +970,7 @@
 
 ---
 
-### TC-LIST-014: Edit Metadata
+### TC-DL-017: Edit Metadata
 **Priority:** P1
 **Test Steps:**
 1. Click "Edit" on document
@@ -835,7 +987,7 @@
 
 ---
 
-### TC-LIST-015: Delete Single Document
+### TC-DL-018: Delete Single Document
 **Priority:** P0
 **Test Steps:**
 1. Click "Delete" on document
@@ -845,7 +997,7 @@
 - Document deleted from database (documents table)
 - Embeddings deleted (document_embeddings table)
 - Content deleted (document_content table)
-- Vectors deleted from Qdrant
+- Vector IDs fetched and Qdrant cleanup queued
 - File deleted from Storage
 - Document removed from list
 
@@ -854,7 +1006,7 @@
 
 ---
 
-### TC-LIST-016: Delete with Confirmation Cancel
+### TC-DL-019: Delete with Confirmation Cancel
 **Priority:** P2
 **Test Steps:**
 1. Click "Delete"
@@ -870,7 +1022,7 @@
 
 ---
 
-### TC-LIST-017: Bulk Delete - Multiple Documents
+### TC-DL-020: Bulk Delete - Multiple Documents
 **Priority:** P1
 **Test Steps:**
 1. Select 5 documents using checkboxes
@@ -887,7 +1039,69 @@
 
 ---
 
-### TC-LIST-018: Download Document
+### TC-DL-021: Rate Limiting - Multiple Rapid Deletes Triggering 429
+**Priority:** P1
+**Test Steps:**
+1. Delete 10 documents in rapid succession
+
+**Expected Results:**
+- Throttle kicks in after limit exceeded
+- 429 response returned for throttled requests
+- Error message displayed
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-DL-022: Throttled Delete Error Message
+**Priority:** P1
+**Test Steps:**
+1. Trigger delete throttling
+2. Check error message
+
+**Expected Results:**
+- Clear error message: "Delete rate limit exceeded. Please try again later."
+- Retry suggested
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-DL-023: Qdrant Cleanup Queued on Delete
+**Priority:** P1
+**Test Steps:**
+1. Delete document
+2. Verify Qdrant cleanup worker queued
+
+**Expected Results:**
+- Vector IDs fetched before deletion
+- Cleanup job queued with vectorIds
+- Delete API succeeds even if cleanup pending
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-DL-024: Delete Succeeds When Cleanup Fails
+**Priority:** P1
+**Test Steps:**
+1. Delete document with Qdrant temporarily down
+
+**Expected Results:**
+- Delete API returns success
+- Cleanup job queued for retry
+- Database records deleted
+- Cleanup happens asynchronously
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-DL-025: Download Document
 **Priority:** P1
 **Test Steps:**
 1. Click "Download" on document
@@ -902,7 +1116,7 @@
 
 ---
 
-### TC-LIST-019: View Document Details
+### TC-DL-026: View Document Details
 **Priority:** P2
 **Test Steps:**
 1. Click on document title
@@ -917,7 +1131,7 @@
 
 ---
 
-### TC-LIST-020: Real-Time Status Updates
+### TC-DL-027: Real-Time Status Updates
 **Priority:** P1
 **Preconditions:** Document currently processing
 **Test Steps:**
@@ -934,86 +1148,9 @@
 
 ---
 
-### TC-LIST-021: Empty Search Results
-**Priority:** P2
-**Test Steps:**
-1. Search for "XYZ123NonExistent"
+## 4. SIMILARITY SEARCH - GENERAL (23 Test Cases)
 
-**Expected Results:**
-- "No documents found" message
-- Clear search button visible
-- Can return to full list
-
-**Actual Result:** _____
-**Status:** _____
-
----
-
-### TC-LIST-022: Clear All Filters
-**Priority:** P2
-**Test Steps:**
-1. Apply multiple filters (status, metadata)
-2. Click "Clear Filters" button
-
-**Expected Results:**
-- All filters removed
-- Full document list displayed
-- Search box cleared
-
-**Actual Result:** _____
-**Status:** _____
-
----
-
-### TC-LIST-023: Column Resizing
-**Priority:** P3
-**Test Steps:**
-1. Drag column divider to resize
-
-**Expected Results:**
-- Column width adjusts
-- Content adapts (wraps or ellipsis)
-- Resize persists (localStorage)
-
-**Actual Result:** _____
-**Status:** _____
-
----
-
-### TC-LIST-024: Dark Mode Toggle
-**Priority:** P2
-**Test Steps:**
-1. Toggle to dark mode
-
-**Expected Results:**
-- All UI elements adapt
-- Readable contrast maintained
-- Preference saved
-
-**Actual Result:** _____
-**Status:** _____
-
----
-
-### TC-LIST-025: Mobile Responsive View
-**Priority:** P2
-**Test Steps:**
-1. View dashboard on mobile device (or 375px width)
-
-**Expected Results:**
-- Table converts to card view
-- All actions accessible
-- No horizontal scroll
-- Touch-friendly targets
-
-**Actual Result:** _____
-**Status:** _____
-
----
-
-## 4. SIMILARITY SEARCH - GENERAL (25 Test Cases)
-
-### TC-SEARCH-001: Basic Similarity Search
+### TC-SS-001: Basic Similarity Search
 **Priority:** P0
 **Preconditions:** User has 10+ completed documents
 **Test Steps:**
@@ -1027,7 +1164,7 @@
   - Target document title
   - Source score (0-100%)
   - Target score (0-100%)
-  - Length ratio
+  - Length ratio (percentage, e.g., 50.0%)
   - Top matching sections with page ranges
 - Sorted by score (highest first)
 
@@ -1036,7 +1173,7 @@
 
 ---
 
-### TC-SEARCH-002: Verify 3-Stage Pipeline Execution
+### TC-SS-002: Verify 3-Stage Pipeline Execution
 **Priority:** P1
 **Test Steps:**
 1. Run similarity search
@@ -1054,7 +1191,7 @@
 
 ---
 
-### TC-SEARCH-003: Stage 0 - Centroid Candidate Retrieval
+### TC-SS-003: Stage 0 - Centroid Candidate Retrieval
 **Priority:** P1
 **Test Steps:**
 1. Perform search with stage0_topK=200
@@ -1070,7 +1207,7 @@
 
 ---
 
-### TC-SEARCH-004: Stage 1 - Auto-Skip Logic
+### TC-SS-004: Stage 1 - Auto-Skip Logic
 **Priority:** P1
 **Test Steps:**
 1. Search with stage0_topK=100 (less than stage1_topK default 250)
@@ -1085,7 +1222,7 @@
 
 ---
 
-### TC-SEARCH-005: Stage 1 - Chunk-Level Prefilter
+### TC-SS-005: Stage 1 - Chunk-Level Prefilter
 **Priority:** P1
 **Test Steps:**
 1. Search with stage0_topK=600, stage1_topK=250
@@ -1101,14 +1238,14 @@
 
 ---
 
-### TC-SEARCH-006: Stage 2 - Bidirectional Matching
+### TC-SS-006: Stage 2 - Bidirectional Matching
 **Priority:** P1
 **Test Steps:**
 1. Run search on asymmetric documents (short source, long target)
 
 **Expected Results:**
 - Both source→target and target→source scores calculated
-- Length ratio computed
+- Length ratio computed as percentage
 - Scores differ appropriately
 - Asymmetry handled correctly
 
@@ -1117,7 +1254,7 @@
 
 ---
 
-### TC-SEARCH-007: Stage 2 - Section Detection
+### TC-SS-007: Stage 2 - Section Detection
 **Priority:** P1
 **Test Steps:**
 1. Search document with known similar sections
@@ -1133,7 +1270,7 @@
 
 ---
 
-### TC-SEARCH-008: Search with Page Range Filter - Source
+### TC-SS-008: Search with Page Range Filter - Source
 **Priority:** P1
 **Test Steps:**
 1. Search with sourcePageRange: {start_page: 5, end_page: 10}
@@ -1148,7 +1285,7 @@
 
 ---
 
-### TC-SEARCH-009: Search with Metadata Filter - Law Firm
+### TC-SS-009: Search with Metadata Filter - Law Firm
 **Priority:** P1
 **Test Steps:**
 1. Add filter: Law Firm = "ABC Law"
@@ -1164,7 +1301,7 @@
 
 ---
 
-### TC-SEARCH-010: Search with Multiple Metadata Filters
+### TC-SS-010: Search with Multiple Metadata Filters
 **Priority:** P2
 **Test Steps:**
 1. Filter: Law Firm = "ABC" AND Fund Manager = "XYZ Capital"
@@ -1179,7 +1316,7 @@
 
 ---
 
-### TC-SEARCH-011: Search with Min Score Thresholds
+### TC-SS-011: Search with Min Score Thresholds
 **Priority:** P1
 **Test Steps:**
 1. Set source_min_score = 80%
@@ -1195,7 +1332,7 @@
 
 ---
 
-### TC-SEARCH-012: Search with topK Limit
+### TC-SS-012: Search with topK Limit
 **Priority:** P2
 **Test Steps:**
 1. Set topK = 10
@@ -1210,7 +1347,7 @@
 
 ---
 
-### TC-SEARCH-013: Search Returns Zero Results
+### TC-SS-013: Search Returns Zero Results
 **Priority:** P2
 **Test Steps:**
 1. Search unique document with no similar content
@@ -1225,7 +1362,7 @@
 
 ---
 
-### TC-SEARCH-014: Search - Character-Based Scoring Accuracy
+### TC-SS-014: Search - Character-Based Scoring Accuracy
 **Priority:** P1
 **Test Steps:**
 1. Search with known similar documents
@@ -1241,22 +1378,22 @@
 
 ---
 
-### TC-SEARCH-015: Search - Length Ratio Calculation
+### TC-SS-015: Search - Length Ratio as Percentage
 **Priority:** P2
 **Test Steps:**
-1. Search short doc vs long doc
+1. Search short doc vs long doc (1:2 ratio)
 
 **Expected Results:**
-- Length ratio = source_chars / target_chars
-- Ratio displayed (e.g., "1:2.5")
-- Helps identify partial matches
+- Length ratio displayed as percentage (e.g., 50.0%)
+- NOT displayed as "1:2" format
+- Accurate calculation: source_chars / target_chars * 100
 
 **Actual Result:** _____
 **Status:** _____
 
 ---
 
-### TC-SEARCH-016: Search Performance - Response Time
+### TC-SS-016: Search Performance - Response Time
 **Priority:** P1
 **Test Steps:**
 1. Search with default parameters
@@ -1272,7 +1409,7 @@
 
 ---
 
-### TC-SEARCH-017: Search with Large Result Set (500+ candidates)
+### TC-SS-017: Search with Large Result Set (500+ candidates)
 **Priority:** P2
 **Test Steps:**
 1. Search generic document likely to match many
@@ -1289,7 +1426,7 @@
 
 ---
 
-### TC-SEARCH-018: Search - Concurrent Searches (Multiple Users)
+### TC-SS-018: Search - Concurrent Searches (Multiple Users)
 **Priority:** P2
 **Test Steps:**
 1. User A runs search
@@ -1306,39 +1443,7 @@
 
 ---
 
-### TC-SEARCH-019: Search - Export Results
-**Priority:** P3
-**Test Steps:**
-1. Run search
-2. Click "Export" button
-
-**Expected Results:**
-- Results downloaded as CSV or JSON
-- All data included (scores, sections, page ranges)
-- Filename includes source document name and date
-
-**Actual Result:** _____
-**Status:** _____
-
----
-
-### TC-SEARCH-020: Search - Save Search Parameters
-**Priority:** P3
-**Test Steps:**
-1. Adjust multiple search parameters
-2. Save as "My Custom Search"
-
-**Expected Results:**
-- Parameters saved to profile
-- Can reload saved search
-- Parameters pre-filled
-
-**Actual Result:** _____
-**Status:** _____
-
----
-
-### TC-SEARCH-021: Search - Sort Results by Score
+### TC-SS-019: Search - Sort Results by Score
 **Priority:** P2
 **Test Steps:**
 1. Run search
@@ -1354,7 +1459,7 @@
 
 ---
 
-### TC-SEARCH-022: Search - View Match Details
+### TC-SS-020: Search - View Match Details
 **Priority:** P1
 **Test Steps:**
 1. Run search
@@ -1372,7 +1477,7 @@
 
 ---
 
-### TC-SEARCH-023: Search on Recently Uploaded Document
+### TC-SS-021: Search on Recently Uploaded Document
 **Priority:** P1
 **Test Steps:**
 1. Upload document
@@ -1389,7 +1494,7 @@
 
 ---
 
-### TC-SEARCH-024: Search Document Not Yet Completed
+### TC-SS-022: Search Document Not Yet Completed
 **Priority:** P1
 **Test Steps:**
 1. Try to search document still processing
@@ -1404,7 +1509,7 @@
 
 ---
 
-### TC-SEARCH-025: Search with Adjusted Stage 2 Workers
+### TC-SS-023: Search with Adjusted Stage 2 Workers
 **Priority:** P2
 **Preconditions:** SIMILARITY_STAGE2_WORKERS=1 (test env)
 **Test Steps:**
@@ -1421,9 +1526,9 @@
 
 ---
 
-## 5. SIMILARITY SEARCH - SELECTED (10 Test Cases)
+## 5. SIMILARITY SEARCH - SELECTED (12 Test Cases)
 
-### TC-SEL-001: Selected Search - Choose 3 Target Documents
+### TC-SSS-001: Selected Search - Choose 3 Target Documents
 **Priority:** P1
 **Test Steps:**
 1. Select source document
@@ -1441,7 +1546,7 @@
 
 ---
 
-### TC-SEL-002: Selected Search - Include Zero-Score Matches
+### TC-SSS-002: Selected Search - Include Zero-Score Matches
 **Priority:** P1
 **Test Steps:**
 1. Select source + 5 targets
@@ -1458,7 +1563,7 @@
 
 ---
 
-### TC-SEL-003: Selected Search - Many Targets (20+)
+### TC-SSS-003: Selected Search - Many Targets (20+)
 **Priority:** P2
 **Test Steps:**
 1. Select 25 target documents
@@ -1473,7 +1578,7 @@
 
 ---
 
-### TC-SEL-004: Selected Search with Page Range + Metadata Filters
+### TC-SSS-004: Selected Search with Page Range + Metadata Filters
 **Priority:** P2
 **Test Steps:**
 1. Selected search with 5 targets
@@ -1490,7 +1595,39 @@
 
 ---
 
-### TC-SEL-005: Selected Search - Search Interface UX
+### TC-SSS-005: Selected Search - Source Not Completed
+**Priority:** P1
+**Test Steps:**
+1. Select source document that is still processing
+2. Attempt selected search
+
+**Expected Results:**
+- 400 Bad Request response
+- Error: "Source document not completed"
+- Search blocked until processing completes
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-SSS-006: Selected Search - Target Not Found
+**Priority:** P1
+**Test Steps:**
+1. Select source document
+2. Include target document ID that doesn't exist
+
+**Expected Results:**
+- Graceful handling of missing target
+- Error or skip missing target
+- Other valid targets processed normally
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-SSS-007: Selected Search - Search Interface UX
 **Priority:** P2
 **Test Steps:**
 1. Navigate to selected search mode
@@ -1506,7 +1643,7 @@
 
 ---
 
-### TC-SEL-006: Selected Search - Results Table
+### TC-SSS-008: Selected Search - Results Table
 **Priority:** P1
 **Test Steps:**
 1. Run selected search
@@ -1515,14 +1652,13 @@
 - Table shows all selected targets
 - Columns: Document, Source Score, Target Score, Length Ratio
 - Sorted by score
-- Can export results
 
 **Actual Result:** _____
 **Status:** _____
 
 ---
 
-### TC-SEL-007: Selected Search vs General Search - Result Comparison
+### TC-SSS-009: Selected Search vs General Search - Result Comparison
 **Priority:** P2
 **Test Steps:**
 1. Run general search
@@ -1538,7 +1674,7 @@
 
 ---
 
-### TC-SEL-008: Selected Search - Empty Selection
+### TC-SSS-010: Selected Search - Empty Selection
 **Priority:** P2
 **Test Steps:**
 1. Click "Compare with Selected"
@@ -1555,7 +1691,7 @@
 
 ---
 
-### TC-SEL-009: Selected Search - Target Selection Persists
+### TC-SSS-011: Selected Search - Target Selection Persists
 **Priority:** P3
 **Test Steps:**
 1. Select 5 targets
@@ -1571,17 +1707,15 @@
 
 ---
 
-### TC-SEL-010: Selected Search - Bulk Actions on Results
-**Priority:** P3
+### TC-SSS-012: Selected Search - 404 Handling for Missing Targets
+**Priority:** P2
 **Test Steps:**
-1. Run selected search
-2. Select multiple results
-3. Click "Compare All Selected" (Draftable)
+1. Run selected search with mix of valid and invalid target IDs
 
 **Expected Results:**
-- Bulk comparison initiated
-- Multiple Draftable comparisons created
-- Links provided for each
+- Invalid targets skipped or error shown
+- Valid targets processed
+- Clear error message for missing targets
 
 **Actual Result:** _____
 **Status:** _____
@@ -1600,7 +1734,7 @@
 **Expected Results:**
 - API call to Draftable succeeds
 - Comparison created
-- Signed URL returned (1-hour expiry)
+- Signed URL returned
 - URL opens in new tab
 - Side-by-side comparison displayed
 
@@ -1629,11 +1763,11 @@
 **Priority:** P2
 **Test Steps:**
 1. Create comparison
-2. Wait >1 hour
+2. Wait appropriate time
 3. Try to access URL
 
 **Expected Results:**
-- URL expires after 1 hour
+- URL expires per Draftable policy
 - Draftable error page shown
 - Option to create new comparison
 
@@ -1753,7 +1887,7 @@
 
 ---
 
-## 7. AUTHENTICATION & AUTHORIZATION (30 Test Cases)
+## 7. AUTHENTICATION & AUTHORIZATION (25 Test Cases)
 
 ### TC-AUTH-001: Sign Up with Google OAuth
 **Priority:** P0
@@ -2102,24 +2236,7 @@
 
 ---
 
-### TC-AUTH-023: OAuth State Parameter Validation
-**Priority:** P2
-**Test Steps:**
-1. Initiate Google OAuth
-2. Tamper with state parameter
-3. Complete flow
-
-**Expected Results:**
-- State mismatch detected
-- Authentication rejected
-- CSRF protection working
-
-**Actual Result:** _____
-**Status:** _____
-
----
-
-### TC-AUTH-024: OAuth Callback Error Handling
+### TC-AUTH-023: OAuth Callback Error Handling
 **Priority:** P2
 **Test Steps:**
 1. Simulate OAuth error callback
@@ -2134,7 +2251,7 @@
 
 ---
 
-### TC-AUTH-025: Password Reset (Email/Password, Local Dev)
+### TC-AUTH-024: Password Reset (Email/Password, Local Dev)
 **Priority:** P2
 **Test Steps:**
 1. Click "Forgot Password"
@@ -2153,72 +2270,7 @@
 
 ---
 
-### TC-AUTH-026: Rate Limiting - Login Attempts
-**Priority:** P2
-**Test Steps:**
-1. Attempt login 10 times with wrong password
-
-**Expected Results:**
-- After 5 failed attempts, rate limited
-- Temporary lockout (5 minutes)
-- Error: "Too many attempts, try again later"
-
-**Actual Result:** _____
-**Status:** _____
-
----
-
-### TC-AUTH-027: User Profile Completion
-**Priority:** P3
-**Test Steps:**
-1. First-time user logs in
-2. Prompted to complete profile (if applicable)
-
-**Expected Results:**
-- Profile form displayed
-- Can save name, preferences
-- Optional step
-
-**Actual Result:** _____
-**Status:** _____
-
----
-
-### TC-AUTH-028: Multi-Factor Authentication (if enabled)
-**Priority:** P3
-**Test Steps:**
-1. Enable MFA in profile
-2. Log out and log in again
-
-**Expected Results:**
-- Prompted for MFA code
-- Authentication succeeds with code
-- Session created
-
-**Actual Result:** _____
-**Status:** _____
-
----
-
-### TC-AUTH-029: Account Deletion
-**Priority:** P3
-**Test Steps:**
-1. Log in
-2. Navigate to settings
-3. Delete account
-
-**Expected Results:**
-- Confirmation required
-- All user data deleted (documents, embeddings, vectors)
-- User record deleted from auth.users
-- Cannot log in anymore
-
-**Actual Result:** _____
-**Status:** _____
-
----
-
-### TC-AUTH-030: Anonymous/Public Access Blocked
+### TC-AUTH-025: Anonymous/Public Access Blocked
 **Priority:** P0
 **Test Steps:**
 1. Access any route without authentication
@@ -2233,9 +2285,9 @@
 
 ---
 
-## 8. HEALTH & MONITORING (10 Test Cases)
+## 8. HEALTH & MONITORING (18 Test Cases)
 
-### TC-HEALTH-001: Basic Health Check Endpoint
+### TC-HM-001: Basic Health Check Endpoint
 **Priority:** P1
 **Test Steps:**
 1. Call `GET /api/health`
@@ -2250,7 +2302,7 @@
 
 ---
 
-### TC-HEALTH-002: Connection Pool Health
+### TC-HM-002: Connection Pool Health
 **Priority:** P1
 **Test Steps:**
 1. Call `GET /api/health/pool`
@@ -2261,15 +2313,46 @@
   - Idle connections
   - Active connections
   - Utilization percentage
-  - Throttling state
-  - Qdrant queue status
 
 **Actual Result:** _____
 **Status:** _____
 
 ---
 
-### TC-HEALTH-003: Stuck Jobs Monitoring View
+### TC-HM-003: Health Pool - Throttling Metrics
+**Priority:** P1
+**Test Steps:**
+1. Call `GET /api/health/pool`
+2. Check throttling state
+
+**Expected Results:**
+- Returns throttling.upload.limit
+- Returns throttling.upload.remaining
+- Returns throttling.delete.limit
+- Returns throttling.delete.remaining
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-HM-004: Health Pool - Qdrant Cleanup Queue Depth
+**Priority:** P1
+**Test Steps:**
+1. Call `GET /api/health/pool`
+2. Check Qdrant cleanup metrics
+
+**Expected Results:**
+- Returns qdrantCleanup.queueDepth
+- Returns qdrantCleanup.processing
+- Returns qdrantCleanup.failed
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-HM-005: Stuck Jobs Monitoring View
 **Priority:** P1
 **Test Steps:**
 1. Query `SELECT * FROM stuck_jobs_monitoring;`
@@ -2284,7 +2367,7 @@
 
 ---
 
-### TC-HEALTH-004: Database Connectivity Check
+### TC-HM-006: Database Connectivity Check
 **Priority:** P1
 **Test Steps:**
 1. Health endpoint queries database
@@ -2299,7 +2382,7 @@
 
 ---
 
-### TC-HEALTH-005: Qdrant Connectivity Check
+### TC-HM-007: Qdrant Connectivity Check
 **Priority:** P1
 **Test Steps:**
 1. Health endpoint checks Qdrant
@@ -2314,7 +2397,7 @@
 
 ---
 
-### TC-HEALTH-006: Activity Logging - Upload Action
+### TC-HM-008: Activity Logging - Upload Action
 **Priority:** P2
 **Test Steps:**
 1. Upload document
@@ -2331,7 +2414,7 @@
 
 ---
 
-### TC-HEALTH-007: Activity Logging - Search Action
+### TC-HM-009: Activity Logging - Search Action
 **Priority:** P2
 **Test Steps:**
 1. Perform similarity search
@@ -2347,7 +2430,7 @@
 
 ---
 
-### TC-HEALTH-008: Activity Logging - Delete Action
+### TC-HM-010: Activity Logging - Delete Action
 **Priority:** P2
 **Test Steps:**
 1. Delete document
@@ -2363,7 +2446,7 @@
 
 ---
 
-### TC-HEALTH-009: Cleanup Old Activity Logs Function
+### TC-HM-011: Cleanup Old Activity Logs Function
 **Priority:** P2
 **Test Steps:**
 1. Execute `SELECT cleanup_old_activity_logs();`
@@ -2378,7 +2461,7 @@
 
 ---
 
-### TC-HEALTH-010: Health Check - External Service Status
+### TC-HM-012: Health Check - External Service Status
 **Priority:** P2
 **Test Steps:**
 1. Call health endpoint
@@ -2395,19 +2478,110 @@
 
 ---
 
+### TC-HM-013: Cron Endpoint with Missing CRON_SECRET
+**Priority:** P1
+**Test Steps:**
+1. Call `GET /api/cron/process-jobs` without Authorization header
+
+**Expected Results:**
+- 401 Unauthorized response
+- Error: "Missing or invalid CRON_SECRET"
+- No job processing triggered
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-HM-014: Cron Endpoint with Invalid CRON_SECRET
+**Priority:** P1
+**Test Steps:**
+1. Call `GET /api/cron/process-jobs` with wrong Bearer token
+
+**Expected Results:**
+- 401 Unauthorized response
+- Error: "Invalid CRON_SECRET"
+- No job processing triggered
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-HM-015: Cron Endpoint with Valid CRON_SECRET
+**Priority:** P1
+**Test Steps:**
+1. Call `GET /api/cron/process-jobs` with correct Bearer token
+
+**Expected Results:**
+- 200 OK response
+- Job processing triggered
+- Response includes processed job count
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-HM-016: Cron Endpoint GET Method
+**Priority:** P1
+**Test Steps:**
+1. Call `GET /api/cron/process-jobs` with valid auth
+
+**Expected Results:**
+- GET method supported
+- Jobs processed correctly
+- Same behavior as POST
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-HM-017: Cron Endpoint POST Method
+**Priority:** P1
+**Test Steps:**
+1. Call `POST /api/cron/process-jobs` with valid auth
+
+**Expected Results:**
+- POST method supported
+- Jobs processed correctly
+- Same behavior as GET
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
+### TC-HM-018: Test Process Jobs Endpoint
+**Priority:** P1
+**Test Steps:**
+1. Call `GET /api/test/process-jobs`
+2. Call `POST /api/test/process-jobs`
+
+**Expected Results:**
+- Both GET and POST methods work
+- Jobs processed in test mode
+- Response includes job details
+
+**Actual Result:** _____
+**Status:** _____
+
+---
+
 ## TEST CASE SUMMARY
 
 | Feature Area | Test Cases | P0 | P1 | P2 | P3 |
 |--------------|------------|----|----|----|----|
-| Document Upload | 20 | 2 | 9 | 8 | 1 |
-| Processing Pipeline | 15 | 2 | 8 | 5 | 0 |
-| Document List & Management | 25 | 1 | 10 | 12 | 2 |
-| Similarity Search - General | 25 | 1 | 12 | 10 | 2 |
-| Similarity Search - Selected | 10 | 0 | 5 | 4 | 1 |
+| Document Upload | 26 | 2 | 13 | 10 | 1 |
+| Processing Pipeline | 16 | 2 | 9 | 5 | 0 |
+| Document List & Management | 27 | 1 | 13 | 11 | 2 |
+| Similarity Search - General | 23 | 1 | 11 | 10 | 1 |
+| Similarity Search - Selected | 12 | 0 | 6 | 5 | 1 |
 | Document Comparison | 10 | 0 | 3 | 6 | 1 |
-| Authentication & Authorization | 30 | 7 | 13 | 9 | 1 |
-| Health & Monitoring | 10 | 0 | 6 | 4 | 0 |
-| **TOTAL** | **145** | **13** | **66** | **58** | **8** |
+| Authentication & Authorization | 25 | 7 | 11 | 7 | 0 |
+| Health & Monitoring | 18 | 0 | 11 | 7 | 0 |
+| **TOTAL** | **157** | **13** | **77** | **61** | **6** |
 
 ---
 

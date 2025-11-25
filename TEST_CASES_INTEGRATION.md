@@ -1,8 +1,8 @@
 # PDF SEARCHER - INTEGRATION TEST CASES
 
-**Version:** 1.0
-**Date:** November 24, 2025
-**Total Test Cases:** 60
+**Version:** 1.1
+**Date:** November 25, 2025
+**Total Test Cases:** 66
 
 ---
 
@@ -100,7 +100,7 @@
 
 ---
 
-### 1.4 Supabase Storage (3 Test Cases)
+### 1.4 Supabase Storage (4 Test Cases)
 
 **TC-INT-STORAGE-001:** File Upload with RLS
 - **Priority:** P0
@@ -113,6 +113,10 @@
 **TC-INT-STORAGE-003:** File Deletion
 - **Priority:** P1
 - **Expected:** File removed from storage, no orphaned files
+
+**TC-INT-STORAGE-004:** Qdrant Cleanup Queueing
+- **Priority:** P1
+- **Expected:** Delete operation queues vector IDs for background cleanup without blocking response
 
 ---
 
@@ -128,7 +132,7 @@
 
 ---
 
-## 2. DATABASE OPERATIONS (20 Test Cases)
+## 2. DATABASE OPERATIONS (22 Test Cases)
 
 ### 2.1 CRUD Operations (8 Test Cases)
 
@@ -222,9 +226,25 @@
 
 ---
 
-## 3. API ENDPOINT INTEGRATION (15 Test Cases)
+### 2.4 Validation & Data Integrity (2 Test Cases)
 
-### 3.1 Document API Endpoints (7 Test Cases)
+**TC-INT-DB-009:** Qdrant Cleanup Worker
+- **Priority:** P1
+- **Expected:** Delete endpoint queues vector IDs for background cleanup, worker processes queue
+
+**TC-INT-DB-010:** Pagination Validation
+- **Priority:** P1
+- **Expected:** Invalid pagination parameters return 400 with error details
+
+**TC-INT-DB-011:** Metadata Validation
+- **Priority:** P1
+- **Expected:** Non-object metadata is rejected with clear error message
+
+---
+
+## 3. API ENDPOINT INTEGRATION (19 Test Cases)
+
+### 3.1 Document API Endpoints (8 Test Cases)
 
 **TC-INT-API-001:** POST /api/documents/upload
 - **Priority:** P0
@@ -254,6 +274,10 @@
 - **Priority:** P1
 - **Expected:** Job re-queued, attempts incremented
 
+**TC-INT-API-016:** POST /api/documents/upload - Auto-Cron Trigger
+- **Priority:** P1
+- **Expected:** queueMicrotask calls triggerCronProcessing after upload completes
+
 ---
 
 ### 3.2 Search API Endpoints (4 Test Cases)
@@ -276,11 +300,15 @@
 
 ---
 
-### 3.3 Cron & Health Endpoints (4 Test Cases)
+### 3.3 Cron & Health Endpoints (7 Test Cases)
 
 **TC-INT-API-012:** POST /api/cron/process-jobs
 - **Priority:** P0
 - **Expected:** CRON_SECRET validated, jobs claimed and processed
+
+**TC-INT-API-012a:** GET /api/cron/process-jobs
+- **Priority:** P1
+- **Expected:** Returns processing status, accepts GET requests for monitoring
 
 **TC-INT-API-013:** GET /api/health
 - **Priority:** P1
@@ -294,6 +322,14 @@
 - **Priority:** P2
 - **Expected:** Test endpoint works without auth
 
+**TC-INT-API-015a:** GET /api/test/process-jobs
+- **Priority:** P2
+- **Expected:** Returns processing status, accepts GET requests for testing
+
+**TC-INT-API-017:** GET /api/health/pool - Complete Metrics
+- **Priority:** P1
+- **Expected:** Response includes throttling.upload, throttling.delete, and qdrantCleanup fields with accurate data
+
 ---
 
 ## TEST EXECUTION SUMMARY
@@ -301,9 +337,9 @@
 | Integration Area | Test Cases | Critical |
 |------------------|------------|----------|
 | External Services | 25 | 15 |
-| Database Operations | 20 | 12 |
-| API Endpoints | 15 | 8 |
-| **TOTAL** | **60** | **35** |
+| Database Operations | 22 | 14 |
+| API Endpoints | 19 | 10 |
+| **TOTAL** | **66** | **39** |
 
 ---
 
