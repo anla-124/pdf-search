@@ -320,11 +320,11 @@
 
 **TC-INT-API-015:** POST /api/test/process-jobs
 - **Priority:** P2
-- **Expected:** Test endpoint works without auth
+- **Expected:** Development-only endpoint. Returns 403 in production. Still requires CRON_SECRET header (or falls back to 'test-secret-for-local-dev' in development). Triggers job processing in non-production environments.
 
 **TC-INT-API-015a:** GET /api/test/process-jobs
 - **Priority:** P2
-- **Expected:** Returns processing status, accepts GET requests for testing
+- **Expected:** Development-only endpoint. Returns 403 in production. Accepts GET requests for testing. Requires CRON_SECRET or uses test default in dev.
 
 **TC-INT-API-017:** GET /api/health/pool - Complete Metrics
 - **Priority:** P1

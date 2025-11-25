@@ -290,15 +290,18 @@
 ---
 
 ### TC-UP-017: Cancel Upload Mid-Transfer
-**Priority:** P2
+**Priority:** P3
+**Status:** NOT SUPPORTED
+**Note:** UI disables remove button during 'uploading' status. Cancel is only available for 'queued' and 'processing' statuses after upload completes.
+
 **Test Steps:**
 1. Start uploading large file (20 MB)
-2. Click cancel while progress is at 50%
+2. Attempt to click cancel while upload is in progress
 
 **Expected Results:**
-- Upload cancelled
-- Partial file not stored
-- Document not created in database
+- Remove/cancel button is disabled during upload
+- No way to cancel in-flight uploads from UI
+- Can only cancel after upload completes (queued/processing status)
 
 **Actual Result:** _____
 **Status:** _____
@@ -1024,15 +1027,19 @@
 
 ### TC-DL-020: Bulk Delete - Multiple Documents
 **Priority:** P1
+**Note:** Frontend loops through deletes sequentially (no bulk delete API).
+
 **Test Steps:**
 1. Select 5 documents using checkboxes
 2. Click "Delete Selected"
 3. Confirm
 
 **Expected Results:**
-- All 5 documents deleted
-- Complete cleanup for all (database, Qdrant, storage)
-- Batch operation efficient (not 5 separate deletes)
+- UI shows progress: "Deleting... (1/5)", "Deleting... (2/5)", etc.
+- Documents deleted sequentially (one at a time)
+- Complete cleanup for each (database, Qdrant, storage)
+- All 5 documents eventually deleted
+- Progress indicator updates with each delete
 
 **Actual Result:** _____
 **Status:** _____
@@ -1691,16 +1698,19 @@
 
 ---
 
-### TC-SSS-011: Selected Search - Target Selection Persists
+### TC-SSS-011: Selected Search - Target Selection Clears on Navigation
 **Priority:** P3
+**Note:** Selection state is stored in URL params, not in persistent storage.
+
 **Test Steps:**
-1. Select 5 targets
-2. Navigate away
-3. Return to selected search
+1. Select 5 targets for selected search
+2. Navigate away to dashboard
+3. Return to selected search page
 
 **Expected Results:**
-- Selection cleared (or)
-- Selection persisted in session storage
+- Selection is cleared (selection comes from URL params)
+- User must re-select targets
+- No persistent storage of selection across navigation
 
 **Actual Result:** _____
 **Status:** _____
