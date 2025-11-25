@@ -837,13 +837,16 @@
 
 ### TC-DL-008: Filter by Status - Completed
 **Priority:** P1
+**Note:** Filters stored in component state only, reset on navigation/refresh.
+
 **Test Steps:**
 1. Select "Completed" from status filter dropdown
+2. Navigate away and return to dashboard
 
 **Expected Results:**
-- Only completed documents shown
+- Only completed documents shown while on page
 - Processing/failed/queued documents hidden
-- Filter persists across page navigation
+- Filter resets to "All" on navigation/refresh (no persistence)
 
 **Actual Result:** _____
 **Status:** _____
@@ -1452,14 +1455,17 @@
 
 ### TC-SS-019: Search - Sort Results by Score
 **Priority:** P2
+**Note:** Sort state stored in component state only, resets on navigation.
+
 **Test Steps:**
 1. Run search
 2. Click column headers to sort
+3. Navigate away and return
 
 **Expected Results:**
 - Can sort by: sourceScore, targetScore, lengthRatio
-- Ascending/descending toggle
-- Sort persists during session
+- Ascending/descending toggle works on page
+- Sort resets to default on navigation (no persistence)
 
 **Actual Result:** _____
 **Status:** _____
