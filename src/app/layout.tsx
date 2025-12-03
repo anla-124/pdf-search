@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'PDF Searcher',
+  title: 'PDF Search',
   description: 'AI-powered PDF document processing and similarity search',
 }
 

@@ -10,7 +10,7 @@ import { chromium, FullConfig } from '@playwright/test'
  * - Seeding test data (if needed)
  */
 async function globalSetup(config: FullConfig) {
-  console.warn('🚀 Starting PDF Searcher Test Suite...\n')
+  console.warn('🚀 Starting PDF Search Test Suite...\n')
 
   // Check required environment variables
   const requiredEnvVars = [

@@ -1,4 +1,4 @@
-# PDF Searcher
+# PDF Search
 
 A web application for processing PDF documents and performing similarity searches.
 

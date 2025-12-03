@@ -25,19 +25,19 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center">
             <Image
               src="/mark-logo-color.png"
-              alt="PDF Searcher logo"
+              alt="PDF Search logo"
               width={1080}
               height={1080}
               className="h-16 w-16 object-contain"
               priority
             />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">PDF Searcher</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">PDF Search</h1>
         </div>
 
         <Card className="shadow-xl border-0 bg-white/80 dark:bg-slate-900/90 dark:border-slate-700/50 backdrop-blur-sm">
           <CardHeader className="space-y-1 pb-6">
-            <CardTitle className="text-xl text-center text-gray-900 dark:text-white">Welcome to PDF Searcher</CardTitle>
+            <CardTitle className="text-xl text-center text-gray-900 dark:text-white">Welcome to PDF Search</CardTitle>
             <CardDescription className="text-center text-gray-600 dark:text-gray-400">
               {isLocalDev
                 ? 'Sign in with email or Google to get started'

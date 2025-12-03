@@ -5,7 +5,7 @@ import * as dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 
 /**
- * Playwright Configuration for PDF Searcher
+ * Playwright Configuration for PDF Search
  *
  * This configuration is optimized for API testing with some E2E browser tests.
  * Tests run against your local development server.

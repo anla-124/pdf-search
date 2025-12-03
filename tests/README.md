@@ -2,7 +2,7 @@
 
 ## Overview
 
-This test suite provides high-confidence validation of the PDF Searcher application through real end-to-end workflows with actual document processing, OCR, embeddings, and similarity search.
+This test suite provides high-confidence validation of the PDF Search application through real end-to-end workflows with actual document processing, OCR, embeddings, and similarity search.
 
 ## Test Categories
 
