@@ -417,20 +417,6 @@ function generateTimeoutConfig(
 }
 
 /**
- * Get processing priority for queue management
- */
-export function getProcessingPriority(analysis: DocumentSizeAnalysis): number {
-  const priorityMap = {
-    'critical': 1,
-    'high': 2,
-    'normal': 3,
-    'low': 4
-  }
-  
-  return priorityMap[analysis.processingConfig.priorityLevel]
-}
-
-/**
  * Estimate processing time for user feedback
  */
 export function estimateProcessingTime(analysis: DocumentSizeAnalysis): {
@@ -529,7 +515,6 @@ export function requiresSpecialHandling(analysis: DocumentSizeAnalysis): {
 
 const documentSizeStrategies = {
   analyzeDocumentSize,
-  getProcessingPriority,
   estimateProcessingTime,
   requiresSpecialHandling,
   DOCUMENT_SIZE_TIERS

@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { query, maxPagesPerDoc = 3, maxDocuments = 20 } = body
+    const { query, maxPagesPerDoc = 3, pageSize = 20, pageOffset = 0 } = body
 
     // Validate query
     if (!query || typeof query !== 'string') {
@@ -106,12 +106,22 @@ export async function POST(request: NextRequest) {
     }
 
     if (
-      typeof maxDocuments !== 'number' ||
-      maxDocuments < 1 ||
-      maxDocuments > 100
+      typeof pageSize !== 'number' ||
+      pageSize < 1 ||
+      pageSize > 100
     ) {
       return NextResponse.json(
-        { error: 'maxDocuments must be between 1 and 100' },
+        { error: 'pageSize must be between 1 and 100' },
+        { status: 400 }
+      )
+    }
+
+    if (
+      typeof pageOffset !== 'number' ||
+      pageOffset < 0
+    ) {
+      return NextResponse.json(
+        { error: 'pageOffset must be >= 0' },
         { status: 400 }
       )
     }
@@ -120,11 +130,12 @@ export async function POST(request: NextRequest) {
     // 3. EXECUTE SEARCH
     // ========================================================================
 
-    const { data, error } = await supabase.rpc('search_document_keywords', {
+    const { data, error } = await supabase.rpc('search_document_keywords_paginated', {
       p_user_id: user.id,
       p_search_query: trimmedQuery,
       p_max_pages_per_doc: maxPagesPerDoc,
-      p_max_documents: maxDocuments
+      p_page_size: pageSize,
+      p_page_offset: pageOffset
     })
 
     if (error) {
@@ -158,7 +169,14 @@ export async function POST(request: NextRequest) {
     // 4. TRANSFORM RESULTS
     // ========================================================================
 
-    const dbResults = (data || []) as KeywordSearchDBRow[]
+    const dbResults = (data || []) as Array<KeywordSearchDBRow & {
+      total_documents: number
+      has_more: boolean
+    }>
+
+    // Extract pagination metadata from first row (all rows have same values)
+    const totalDocuments = dbResults[0]?.total_documents || 0
+    const hasMore = dbResults[0]?.has_more || false
 
     const response: KeywordSearchResponse = {
       results: dbResults.map(row => ({
@@ -166,10 +184,16 @@ export async function POST(request: NextRequest) {
         title: row.title,
         filename: row.filename,
         totalMatches: Number(row.total_matches),
-        matches: row.matches || []
+        matches: row.matches || [],
+        // Add hasMorePages flag: true if totalMatches > number of matches returned
+        hasMorePages: Number(row.total_matches) > (row.matches?.length || 0)
       })),
       query: trimmedQuery,
-      total: dbResults.length
+      total: dbResults.length,
+      totalDocuments: Number(totalDocuments),
+      hasMore,
+      pageSize,
+      pageOffset
     }
 
     // ========================================================================

@@ -969,25 +969,41 @@ ORDER BY tablename;
 -- =====================================================
 
 -- =====================================================
--- 🔍 KEYWORD SEARCH FUNCTION
+-- PAGINATED KEYWORD SEARCH FUNCTIONS
 -- =====================================================
--- Added for keyword-based content search with page-level results
--- Returns documents matching keywords with excerpts and page numbers
 
-CREATE OR REPLACE FUNCTION search_document_keywords(
+-- Function: search_document_keywords_paginated
+-- Purpose: Keyword search with document-level pagination (no hard limits)
+-- Returns: Paginated document results with total count and hasMore flag
+CREATE OR REPLACE FUNCTION search_document_keywords_paginated(
   p_user_id UUID,
   p_search_query TEXT,
   p_max_pages_per_doc INTEGER DEFAULT 3,
-  p_max_documents INTEGER DEFAULT 20
+  p_page_size INTEGER DEFAULT 20,
+  p_page_offset INTEGER DEFAULT 0
 )
 RETURNS TABLE (
   document_id UUID,
   title TEXT,
   filename TEXT,
   total_matches BIGINT,
-  matches JSONB
+  matches JSONB,
+  total_documents BIGINT,
+  has_more BOOLEAN
 ) AS $$
+DECLARE
+  v_total_docs BIGINT;
 BEGIN
+  -- Step 1: Count total matching documents
+  SELECT COUNT(DISTINCT de.document_id) INTO v_total_docs
+  FROM document_embeddings de
+  INNER JOIN documents d ON d.id = de.document_id
+  WHERE
+    d.user_id = p_user_id
+    AND d.status = 'completed'
+    AND to_tsvector('english', de.chunk_text) @@ plainto_tsquery('english', p_search_query);
+
+  -- Step 2: Get paginated results
   RETURN QUERY
   WITH ranked_matches AS (
     SELECT
@@ -995,7 +1011,6 @@ BEGIN
       d.title,
       d.filename,
       -- Handle multi-page chunks: use start_page as primary reference
-      -- Fallback to page_number for legacy single-page chunks
       COALESCE(de.start_page_number, de.page_number) as page_num,
       -- Generate excerpt with highlighted keywords (150-200 chars)
       ts_headline(
@@ -1009,7 +1024,7 @@ BEGIN
         to_tsvector('english', de.chunk_text),
         plainto_tsquery('english', p_search_query)
       ) as rank,
-      -- Deduplicate: get best excerpt per page (handles multiple chunks per page)
+      -- Deduplicate: get best excerpt per page
       ROW_NUMBER() OVER (
         PARTITION BY de.document_id, COALESCE(de.start_page_number, de.page_number)
         ORDER BY ts_rank(
@@ -1020,8 +1035,8 @@ BEGIN
     FROM document_embeddings de
     INNER JOIN documents d ON d.id = de.document_id
     WHERE
-      d.user_id = p_user_id                    -- Security: only user's documents
-      AND d.status = 'completed'                -- Only search completed documents
+      d.user_id = p_user_id
+      AND d.status = 'completed'
       AND to_tsvector('english', de.chunk_text) @@ plainto_tsquery('english', p_search_query)
   ),
   top_pages_per_doc AS (
@@ -1032,15 +1047,15 @@ BEGIN
       rm.page_num,
       rm.excerpt,
       rm.rank,
-      -- Limit to top N pages per document (default: 3)
+      -- Limit to top N pages per document
       ROW_NUMBER() OVER (
         PARTITION BY rm.document_id
         ORDER BY rm.rank DESC, rm.page_num ASC
       ) as doc_page_rank
     FROM ranked_matches rm
-    WHERE rm.page_rank = 1  -- Best excerpt per page only (deduplication)
+    WHERE rm.page_rank = 1  -- Best excerpt per page only
   ),
-  doc_matches AS (
+  all_doc_matches AS (
     SELECT
       tpd.document_id,
       tpd.title,
@@ -1056,20 +1071,96 @@ BEGIN
       MAX(tpd.rank) as max_rank
     FROM top_pages_per_doc tpd
     GROUP BY tpd.document_id, tpd.title, tpd.filename
-    ORDER BY max_rank DESC
-    LIMIT p_max_documents
+  ),
+  paginated_docs AS (
+    SELECT
+      adm.*,
+      ROW_NUMBER() OVER (ORDER BY adm.max_rank DESC) as row_num
+    FROM all_doc_matches adm
   )
   SELECT
-    dm.document_id,
-    dm.title,
-    dm.filename,
-    dm.total_matches,
-    dm.matches
-  FROM doc_matches dm;
+    pd.document_id,
+    pd.title,
+    pd.filename,
+    pd.total_matches,
+    pd.matches,
+    v_total_docs as total_documents,
+    (v_total_docs > p_page_offset + p_page_size) as has_more
+  FROM paginated_docs pd
+  WHERE pd.row_num > p_page_offset AND pd.row_num <= p_page_offset + p_page_size
+  ORDER BY pd.max_rank DESC;
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
 -- Grant execute permission to authenticated users
-GRANT EXECUTE ON FUNCTION search_document_keywords(UUID, TEXT, INTEGER, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION search_document_keywords_paginated(UUID, TEXT, INTEGER, INTEGER, INTEGER) TO authenticated;
+
+-- Function: get_additional_keyword_pages
+-- Purpose: Load additional matching pages for a specific document
+-- Returns: Next batch of matching pages (re-runs search for consistency)
+CREATE OR REPLACE FUNCTION get_additional_keyword_pages(
+  p_user_id UUID,
+  p_document_id UUID,
+  p_search_query TEXT,
+  p_skip_pages INTEGER DEFAULT 3,
+  p_fetch_pages INTEGER DEFAULT 5
+)
+RETURNS TABLE (
+  page_number INTEGER,
+  excerpt TEXT,
+  score NUMERIC
+) AS $$
+BEGIN
+  RETURN QUERY
+  WITH ranked_matches AS (
+    SELECT
+      COALESCE(de.start_page_number, de.page_number) as page_num,
+      ts_headline(
+        'english',
+        de.chunk_text,
+        plainto_tsquery('english', p_search_query),
+        'MaxWords=40, MinWords=20, MaxFragments=1'
+      ) as excerpt,
+      ts_rank(
+        to_tsvector('english', de.chunk_text),
+        plainto_tsquery('english', p_search_query)
+      ) as rank,
+      ROW_NUMBER() OVER (
+        PARTITION BY COALESCE(de.start_page_number, de.page_number)
+        ORDER BY ts_rank(
+          to_tsvector('english', de.chunk_text),
+          plainto_tsquery('english', p_search_query)
+        ) DESC
+      ) as page_rank
+    FROM document_embeddings de
+    INNER JOIN documents d ON d.id = de.document_id
+    WHERE
+      d.id = p_document_id
+      AND d.user_id = p_user_id
+      AND d.status = 'completed'
+      AND to_tsvector('english', de.chunk_text) @@ plainto_tsquery('english', p_search_query)
+  ),
+  ranked_pages AS (
+    SELECT
+      rm.page_num,
+      rm.excerpt,
+      rm.rank,
+      ROW_NUMBER() OVER (ORDER BY rm.rank DESC, rm.page_num ASC) as doc_page_rank
+    FROM ranked_matches rm
+    WHERE rm.page_rank = 1  -- Best excerpt per page
+  )
+  SELECT
+    rp.page_num::INTEGER as page_number,
+    rp.excerpt,
+    ROUND(rp.rank::numeric, 4) as score
+  FROM ranked_pages rp
+  WHERE rp.doc_page_rank > p_skip_pages
+    AND rp.doc_page_rank <= p_skip_pages + p_fetch_pages
+  ORDER BY rp.rank DESC;
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+-- Grant execute permission to authenticated users
+GRANT EXECUTE ON FUNCTION get_additional_keyword_pages(UUID, UUID, TEXT, INTEGER, INTEGER) TO authenticated;
 
 -- =====================================================

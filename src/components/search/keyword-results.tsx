@@ -9,7 +9,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { KeywordSearchResult } from '@/types/search'
+import type { KeywordSearchResult, KeywordMatch } from '@/types/search'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -31,8 +31,17 @@ export function KeywordResults({
   const router = useRouter()
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
 
+  // Single state object for document states (Claude 2's recommendation)
+  const [docStates, setDocStates] = useState<Record<string, {
+    additionalPages: KeywordMatch[]
+    isLoading: boolean
+    fullyLoaded: boolean
+    error: string | null
+  }>>({})
+
   /**
-   * Toggle expansion of a document's matches
+   * Toggle expansion of a document's additional loaded pages
+   * Only used after loading more pages from server
    */
   const toggleExpanded = (documentId: string) => {
     const newExpanded = new Set(expandedDocs)
@@ -42,6 +51,79 @@ export function KeywordResults({
       newExpanded.add(documentId)
     }
     setExpandedDocs(newExpanded)
+  }
+
+  /**
+   * Load more pages for a specific document
+   * Implements retry logic as recommended by Claude 2
+   */
+  const loadMorePages = async (documentId: string, currentMatches: number) => {
+    try {
+      // Set loading state
+      setDocStates(prev => ({
+        ...prev,
+        [documentId]: {
+          ...prev[documentId],
+          isLoading: true,
+          error: null,
+          additionalPages: prev[documentId]?.additionalPages || [],
+          fullyLoaded: prev[documentId]?.fullyLoaded || false
+        }
+      }))
+
+      const response = await fetch('/api/documents/keyword-search/load-more-pages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          documentId,
+          query,
+          skipPages: currentMatches,
+          fetchPages: 5
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to load more pages')
+      }
+
+      const data = await response.json()
+
+      // Update state with new pages
+      setDocStates(prev => ({
+        ...prev,
+        [documentId]: {
+          additionalPages: [
+            ...(prev[documentId]?.additionalPages || []),
+            ...data.pages
+          ],
+          isLoading: false,
+          fullyLoaded: !data.hasMore,
+          error: null
+        }
+      }))
+
+      // Auto-expand document to show new pages
+      setExpandedDocs(prev => new Set([...prev, documentId]))
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load more pages'
+
+      // Set error state
+      setDocStates(prev => ({
+        ...prev,
+        [documentId]: {
+          ...prev[documentId],
+          isLoading: false,
+          error: errorMessage,
+          additionalPages: prev[documentId]?.additionalPages || [],
+          fullyLoaded: prev[documentId]?.fullyLoaded || false
+        }
+      }))
+
+      console.error('Error loading more pages:', error)
+    }
   }
 
   /**
@@ -108,8 +190,25 @@ export function KeywordResults({
 
       {/* Results List */}
       {results.map((doc) => {
+        const docState = docStates[doc.documentId]
+        const additionalPages = docState?.additionalPages || []
+        const isLoadingMore = docState?.isLoading || false
+        const hasError = docState?.error
+        const fullyLoaded = docState?.fullyLoaded || false
         const isExpanded = expandedDocs.has(doc.documentId)
-        const visibleMatches = isExpanded ? doc.matches : doc.matches.slice(0, 1)
+
+        // Combine initial matches with additional loaded pages
+        const allMatches = [...doc.matches, ...additionalPages]
+        // If we've loaded additional pages and document is collapsed, show only first 3
+        // Otherwise show all matches
+        const visibleMatches = (additionalPages.length > 0 && !isExpanded)
+          ? doc.matches
+          : allMatches
+
+        // Calculate counts for display
+        const loadedCount = allMatches.length
+        const totalCount = doc.totalMatches
+        const hasMoreToLoad = loadedCount < totalCount && !fullyLoaded
 
         return (
           <Card key={doc.documentId} className="overflow-hidden">
@@ -125,7 +224,12 @@ export function KeywordResults({
                   <p className="text-sm text-gray-500 truncate">{doc.filename}</p>
                 </div>
                 <Badge variant="secondary" className="flex-shrink-0">
-                  {doc.totalMatches} match{doc.totalMatches !== 1 ? 'es' : ''}
+                  {totalCount} match{totalCount !== 1 ? 'es' : ''}
+                  {loadedCount < totalCount && (
+                    <span className="ml-1 text-xs opacity-70">
+                      (showing {loadedCount})
+                    </span>
+                  )}
                 </Badge>
               </div>
             </CardHeader>
@@ -153,11 +257,6 @@ export function KeywordResults({
                           dangerouslySetInnerHTML={{
                             __html: sanitizeExcerpt(match.excerpt)
                           }}
-                          style={{
-                            // Style for highlighted keywords
-                            '--highlight-bg': '#fef3c7',
-                            '--highlight-text': '#92400e'
-                          } as React.CSSProperties}
                         />
                       </div>
                       <Button
@@ -174,8 +273,8 @@ export function KeywordResults({
                 ))}
               </div>
 
-              {/* Show More/Less Button */}
-              {doc.matches.length > 1 && (
+              {/* Show Less / Show All Button (only appears after loading more) */}
+              {additionalPages.length > 0 && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -190,11 +289,54 @@ export function KeywordResults({
                   ) : (
                     <>
                       <ChevronDown className="h-4 w-4 mr-1" />
-                      Show {doc.matches.length - 1} more match
-                      {doc.matches.length - 1 !== 1 ? 'es' : ''}
+                      Show all {allMatches.length} page{allMatches.length !== 1 ? 's' : ''}
                     </>
                   )}
                 </Button>
+              )}
+
+              {/* Load More Pages Button */}
+              {hasMoreToLoad && !isLoadingMore && !hasError && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadMorePages(doc.documentId, loadedCount)}
+                  className="w-full mt-2"
+                >
+                  <ChevronDown className="h-4 w-4 mr-1" />
+                  Load {Math.min(5, totalCount - loadedCount)} more page
+                  {Math.min(5, totalCount - loadedCount) !== 1 ? 's' : ''} ({totalCount - loadedCount} remaining)
+                </Button>
+              )}
+
+              {/* Loading State */}
+              {isLoadingMore && (
+                <div className="flex items-center justify-center mt-2 py-2 text-sm text-gray-600">
+                  <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full mr-2" />
+                  Loading more pages...
+                </div>
+              )}
+
+              {/* Error State with Retry */}
+              {hasError && (
+                <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+                  <p className="text-sm text-red-600 mb-2">{hasError}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadMorePages(doc.documentId, loadedCount)}
+                    className="w-full text-red-600 border-red-300 hover:bg-red-50"
+                  >
+                    Retry
+                  </Button>
+                </div>
+              )}
+
+              {/* All Pages Loaded */}
+              {fullyLoaded && loadedCount < totalCount && (
+                <div className="mt-2 text-center text-xs text-gray-500">
+                  All available pages loaded
+                </div>
               )}
             </CardContent>
           </Card>
@@ -204,11 +346,8 @@ export function KeywordResults({
       {/* CSS for highlighted keywords */}
       <style jsx global>{`
         .keyword-results strong {
-          background-color: #fef3c7;
-          color: #92400e;
-          font-weight: 600;
-          padding: 1px 2px;
-          border-radius: 2px;
+          font-weight: 700;
+          color: inherit;
         }
       `}</style>
     </div>

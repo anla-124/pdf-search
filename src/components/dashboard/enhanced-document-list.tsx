@@ -43,6 +43,7 @@ import {
   FilterX,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   Loader2,
@@ -101,6 +102,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
   const [searchMode, setSearchMode] = useState<'name' | 'content'>('name')
   const [keywordResults, setKeywordResults] = useState<KeywordSearchResponse | null>(null)
   const [isKeywordSearching, setIsKeywordSearching] = useState(false)
+  const [isLoadingMoreKeywordDocs, setIsLoadingMoreKeywordDocs] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -160,6 +162,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
   const documentsRef = useRef<Document[]>([])
   const isPageVisibleRef = useRef(true)
   const pollingStartTimesRef = useRef<Map<string, number>>(new Map())
+  const keywordPageOffsetRef = useRef(0)
 
   // Resizable columns
   const { columnWidths, handleMouseDown } = useResizableColumns({
@@ -227,16 +230,26 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
 
   /**
    * Perform keyword search on document content
+   * @param query Search query string
+   * @param append If true, appends results to existing; if false, replaces results
    */
-  const performKeywordSearch = useCallback(async (query: string) => {
+  const performKeywordSearch = useCallback(async (query: string, append = false) => {
     if (!query.trim()) {
       setKeywordResults(null)
+      keywordPageOffsetRef.current = 0
       return
     }
 
     try {
-      setIsKeywordSearching(true)
+      if (append) {
+        setIsLoadingMoreKeywordDocs(true)
+      } else {
+        setIsKeywordSearching(true)
+        keywordPageOffsetRef.current = 0
+      }
       setError('')
+
+      const offset = append ? keywordPageOffsetRef.current : 0
 
       const response = await fetch('/api/documents/keyword-search', {
         method: 'POST',
@@ -244,7 +257,8 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
         body: JSON.stringify({
           query: query.trim(),
           maxPagesPerDoc: 3,
-          maxDocuments: 20
+          pageSize: 20,
+          pageOffset: offset
         })
       })
 
@@ -254,17 +268,43 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
       }
 
       const data: KeywordSearchResponse = await response.json()
-      setKeywordResults(data)
+
+      if (append) {
+        // Append new results to existing (use functional update to avoid dependency)
+        setKeywordResults(prev => prev ? {
+          ...data,
+          results: [...prev.results, ...data.results]
+        } : data)
+      } else {
+        // Replace with new results
+        setKeywordResults(data)
+      }
+
+      // Update page offset for next load
+      const newOffset = offset + data.results.length
+      keywordPageOffsetRef.current = newOffset
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to search documents'
       setError(errorMessage)
       clientLogger.error('Keyword search error:', err)
-      setKeywordResults(null)
+      if (!append) {
+        setKeywordResults(null)
+      }
     } finally {
       setIsKeywordSearching(false)
+      setIsLoadingMoreKeywordDocs(false)
     }
   }, [])
+
+  /**
+   * Load more keyword search documents (pagination)
+   */
+  const loadMoreKeywordDocuments = useCallback(() => {
+    if (searchQuery && !isLoadingMoreKeywordDocs && !isKeywordSearching) {
+      performKeywordSearch(searchQuery, true)
+    }
+  }, [searchQuery, isLoadingMoreKeywordDocs, isKeywordSearching, performKeywordSearch])
 
   /**
    * Handle search mode changes
@@ -272,6 +312,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
   const handleSearchModeChange = (mode: 'name' | 'content') => {
     setSearchMode(mode)
     setKeywordResults(null)
+    keywordPageOffsetRef.current = 0
     setError('')
 
     // If switching to content mode and there's a query, perform search
@@ -1423,38 +1464,68 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
 
           {/* Keyword Search Results (Content Mode) */}
           {searchMode === 'content' ? (
-            <KeywordResults
-              results={keywordResults?.results || []}
-              query={searchQuery}
-              isLoading={isKeywordSearching}
-              onViewDocument={async (documentId, pageNumber) => {
-                const doc = documents.find(d => d.id === documentId)
-                if (!doc) return
+            <>
+              <KeywordResults
+                results={keywordResults?.results || []}
+                query={searchQuery}
+                isLoading={isKeywordSearching}
+                onViewDocument={async (documentId, pageNumber) => {
+                  const doc = documents.find(d => d.id === documentId)
+                  if (!doc) return
 
-                try {
-                  const response = await fetch(`/api/documents/${doc.id}/download`)
-                  if (!response.ok) throw new Error('Failed to retrieve document')
+                  try {
+                    const response = await fetch(`/api/documents/${doc.id}/download`)
+                    if (!response.ok) throw new Error('Failed to retrieve document')
 
-                  const blob = await response.blob()
-                  const url = window.URL.createObjectURL(blob)
+                    const blob = await response.blob()
+                    const url = window.URL.createObjectURL(blob)
 
-                  // Add page number using PDF fragment identifier
-                  const urlWithPage = pageNumber ? `${url}#page=${pageNumber}` : url
+                    // Add page number using PDF fragment identifier
+                    const urlWithPage = pageNumber ? `${url}#page=${pageNumber}` : url
 
-                  window.open(urlWithPage, '_blank', 'noopener,noreferrer')
+                    window.open(urlWithPage, '_blank', 'noopener,noreferrer')
 
-                  setTimeout(() => window.URL.revokeObjectURL(url), 1000)
-                } catch (error) {
-                  clientLogger.error('Failed to open document', {
-                    error,
-                    documentId: doc.id,
-                    filename: doc.filename,
-                    pageNumber
-                  })
-                  alert(`Failed to open "${doc.title}". Please try again.`)
-                }
-              }}
-            />
+                    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+                  } catch (error) {
+                    clientLogger.error('Failed to open document', {
+                      error,
+                      documentId: doc.id,
+                      filename: doc.filename,
+                      pageNumber
+                    })
+                    alert(`Failed to open "${doc.title}". Please try again.`)
+                  }
+                }}
+              />
+
+              {/* Load More Documents Button */}
+              {keywordResults && keywordResults.hasMore && !isKeywordSearching && (
+                <div className="mt-4 flex flex-col items-center gap-2">
+                  <div className="text-sm text-gray-600">
+                    Showing {keywordResults.results.length} of {keywordResults.totalDocuments} documents
+                  </div>
+                  <Button
+                    onClick={loadMoreKeywordDocuments}
+                    disabled={isLoadingMoreKeywordDocs}
+                    variant="outline"
+                    className="w-full max-w-md"
+                  >
+                    {isLoadingMoreKeywordDocs ? (
+                      <>
+                        <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full mr-2" />
+                        Loading more documents...
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4 mr-2" />
+                        Load {Math.min(20, keywordResults.totalDocuments - keywordResults.results.length)} more document
+                        {Math.min(20, keywordResults.totalDocuments - keywordResults.results.length) !== 1 ? 's' : ''}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </>
           ) : (
             /* Document List Table (Name Mode) */
             <>

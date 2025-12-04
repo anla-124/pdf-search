@@ -33,8 +33,10 @@ export interface KeywordSearchRequest {
   query: string
   /** Maximum number of matching pages to return per document (default: 3) */
   maxPagesPerDoc?: number
-  /** Maximum number of documents to return (default: 20) */
-  maxDocuments?: number
+  /** Number of documents per page (default: 20) */
+  pageSize?: number
+  /** Offset for document pagination (default: 0) */
+  pageOffset?: number
 }
 
 /**
@@ -65,6 +67,8 @@ export interface KeywordSearchResult {
   totalMatches: number
   /** Array of matching pages with excerpts (limited to maxPagesPerDoc) */
   matches: KeywordMatch[]
+  /** Whether this document has more pages beyond the initial limit */
+  hasMorePages?: boolean
   /** Document creation timestamp (optional) */
   created_at?: string
   /** Additional document metadata (optional) */
@@ -79,8 +83,42 @@ export interface KeywordSearchResponse {
   results: KeywordSearchResult[]
   /** Original search query */
   query: string
-  /** Total number of documents returned */
+  /** Total number of documents returned in this response */
   total: number
+  /** Total number of documents matching the query (across all pages) */
+  totalDocuments: number
+  /** Whether more documents are available (for pagination) */
+  hasMore: boolean
+  /** Current page size */
+  pageSize: number
+  /** Current page offset */
+  pageOffset: number
+}
+
+/**
+ * Request parameters for loading additional keyword pages
+ */
+export interface LoadMorePagesRequest {
+  /** Document ID to load more pages for */
+  documentId: string
+  /** Original search query */
+  query: string
+  /** Number of pages already loaded (to skip) */
+  skipPages?: number
+  /** Number of additional pages to fetch (default: 5) */
+  fetchPages?: number
+}
+
+/**
+ * Response from loading additional keyword pages
+ */
+export interface LoadMorePagesResponse {
+  /** Document ID */
+  documentId: string
+  /** Additional matching pages */
+  pages: KeywordMatch[]
+  /** Whether more pages are available */
+  hasMore: boolean
 }
 
 // ============================================================================
@@ -88,8 +126,8 @@ export interface KeywordSearchResponse {
 // ============================================================================
 
 /**
- * Row returned from search_document_keywords() stored function
- * Maps directly to PostgreSQL function output
+ * Row returned from search_document_keywords_paginated() stored function
+ * Maps directly to PostgreSQL function output (with pagination metadata)
  */
 export interface KeywordSearchDBRow {
   document_id: string
