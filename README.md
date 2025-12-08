@@ -255,7 +255,7 @@ Three environment templates are provided for different deployment scenarios:
   npm run dev
   ```
 - **Features:**
-  - `NODE_TLS_REJECT_UNAUTHORIZED=0` for corporate VPN environments
+  - TLS verification remains enabled (do not set `NODE_TLS_REJECT_UNAUTHORIZED=0`). If you’re behind a corporate proxy, import its CA instead of disabling TLS checks.
   - Conservative limits for local testing (2 concurrent operations, 40 pool connections)
   - All other services (Google Cloud, Qdrant, Draftable) use managed instances
 

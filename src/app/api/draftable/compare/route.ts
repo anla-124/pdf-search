@@ -40,7 +40,6 @@ export async function POST(request: NextRequest) {
       .from('documents')
       .select('file_path, title, content_type')
       .eq('id', sourceDocId)
-      .eq('user_id', userId)
       .single()
 
     if (sourceError || !sourceDoc) {
@@ -56,7 +55,6 @@ export async function POST(request: NextRequest) {
       .from('documents')
       .select('file_path, title, content_type')
       .eq('id', targetDocId)
-      .eq('user_id', userId)
       .single()
 
     if (targetError || !targetDoc) {

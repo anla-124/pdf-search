@@ -129,10 +129,10 @@ export function MobileNav() {
               size="sm"
               onClick={handleLogout}
               disabled={isLoading}
-              className="w-full justify-start text-gray-700 hover:text-red-600"
+              className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
             >
               <LogOut className="mr-3 h-4 w-4" />
-              {isLoading ? 'Logging out...' : 'Logout'}
+              {isLoading ? 'Logging out...' : 'Log out'}
             </Button>
           </div>
         </div>

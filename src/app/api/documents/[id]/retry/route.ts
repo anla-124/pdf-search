@@ -53,7 +53,6 @@ export async function POST(
       .from('documents')
       .select('id, user_id, title, filename, file_path, file_size, content_type, status, processing_error, metadata, page_count, created_at, updated_at')
       .eq('id', id)
-      .eq('user_id', userId)
       .single()
 
     if (documentError) {
@@ -155,9 +154,11 @@ export async function POST(
       return NextResponse.json({ error: 'Document file path is missing' }, { status: 500 })
     }
 
+    const jobUserId = typeof document.user_id === 'string' ? document.user_id : userId
+
     const { jobId, sizeAnalysis } = await queueDocumentProcessingJob({
       documentId: id,
-      userId: userId,
+      userId: jobUserId,
       filename,
       fileSize,
       filePath,
@@ -170,7 +171,7 @@ export async function POST(
     } else {
       processUploadedDocument({
         documentId: id,
-        userId: userId,
+        userId: jobUserId,
         filename,
         fileSize,
         filePath,

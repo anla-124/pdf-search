@@ -6,6 +6,9 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/dashboard'
+  const forwardedHost = request.headers.get('x-forwarded-host')
+  const forwardedProto = request.headers.get('x-forwarded-proto')
+  const isLocalEnv = process.env.NODE_ENV === 'development'
 
   if (code) {
     const supabase = await createClient()
@@ -16,17 +19,14 @@ export async function GET(request: Request) {
       const { data: userData, error: userError } = await supabase.auth.getUser()
       
       if (!userError && userData?.user) {
-        const forwardedHost = request.headers.get('x-forwarded-host')
-        const isLocalEnv = process.env.NODE_ENV === 'development'
+        // Derive the correct redirect base to preserve the host your users actually used
+        const redirectBase = isLocalEnv
+          ? origin // Use current origin (e.g., LAN IP) in development
+          : forwardedHost
+            ? `${forwardedProto || 'https'}://${forwardedHost}`
+            : origin
 
-        if (isLocalEnv) {
-          // Force HTTP in local development
-          return NextResponse.redirect(`http://localhost:3000${next}`)
-        } else if (forwardedHost) {
-          return NextResponse.redirect(`https://${forwardedHost}${next}`)
-        } else {
-          return NextResponse.redirect(`${origin}${next}`)
-        }
+        return NextResponse.redirect(`${redirectBase}${next}`)
       }
     }
 

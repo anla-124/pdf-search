@@ -13,6 +13,9 @@ export default function LoginPage() {
     setIsLocalDev(
       window.location.hostname === 'localhost' ||
       window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === '127.0.2.2' ||
+      window.location.hostname === '192.168.169.53' ||
+      window.location.hostname === '192.168.1.106' ||
       window.location.hostname === '0.0.0.0'
     )
   }, [])
@@ -74,7 +77,7 @@ export default function LoginPage() {
 
             {!isLocalDev && (
               <p className="text-center text-sm text-gray-600 mt-6">
-                Sign in with your Google account to get started
+                Log in with your Google account to get started
               </p>
             )}
           </CardContent>

@@ -38,7 +38,6 @@ export async function GET(request: NextRequest) {
     let countQuery = supabase
       .from('documents')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
     
     if (status) {
       countQuery = countQuery.eq('status', status)
@@ -83,7 +82,6 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('documents')
       .select(selectClause)
-      .eq('user_id', userId)
 
     // Apply filters
     if (status) {

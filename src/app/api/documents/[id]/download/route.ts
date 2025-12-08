@@ -15,14 +15,13 @@ export async function GET(
       return authResult // Return error response
     }
 
-    const { userId, supabase } = authResult
+    const { supabase } = authResult
 
     // Get document to check ownership and get file path
     const { data: document, error: fetchError } = await supabase
       .from('documents')
       .select('file_path, filename, content_type')
       .eq('id', id)
-      .eq('user_id', userId)
       .single<{ file_path: string | null; filename: string | null; content_type: string | null }>()
 
     if (fetchError) {

@@ -531,44 +531,69 @@ CREATE POLICY "Users can view own profile" ON users FOR SELECT USING (auth.uid()
 DROP POLICY IF EXISTS "Users can update own profile" ON users;
 CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (auth.uid() = id);
 
--- Documents policies - users can only access their own documents
+-- Documents policies - allow all anduintransact.com users full access
 DROP POLICY IF EXISTS "Users can view own documents" ON documents;
-CREATE POLICY "Users can view own documents" ON documents FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "anduin can view documents" ON documents FOR SELECT
+USING (split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com');
 DROP POLICY IF EXISTS "Users can insert own documents" ON documents;
-CREATE POLICY "Users can insert own documents" ON documents FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "anduin can insert documents" ON documents FOR INSERT
+WITH CHECK (
+  split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com'
+  AND auth.uid() = user_id
+);
 DROP POLICY IF EXISTS "Users can update own documents" ON documents;
-CREATE POLICY "Users can update own documents" ON documents FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "anduin can update documents" ON documents FOR UPDATE
+USING (split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com');
 DROP POLICY IF EXISTS "Users can delete own documents" ON documents;
-CREATE POLICY "Users can delete own documents" ON documents FOR DELETE USING (auth.uid() = user_id);
+CREATE POLICY "anduin can delete documents" ON documents FOR DELETE
+USING (split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com');
 
 -- Policies for extracted_fields removed (table no longer exists)
 
 -- Document content policies (store extracted text per document)
 DROP POLICY IF EXISTS "Users can view own document content" ON document_content;
-CREATE POLICY "Users can view own document content" ON document_content FOR SELECT
-USING (EXISTS (SELECT 1 FROM documents d WHERE d.id = document_id AND d.user_id = auth.uid()));
+CREATE POLICY "anduin can view document content" ON document_content FOR SELECT
+USING (
+  split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com'
+  AND EXISTS (SELECT 1 FROM documents d WHERE d.id = document_id)
+);
 
 DROP POLICY IF EXISTS "Users can upsert own document content" ON document_content;
-CREATE POLICY "Users can upsert own document content" ON document_content FOR INSERT
-WITH CHECK (EXISTS (SELECT 1 FROM documents d WHERE d.id = document_id AND d.user_id = auth.uid()));
+CREATE POLICY "anduin can insert document content" ON document_content FOR INSERT
+WITH CHECK (
+  split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com'
+  AND EXISTS (SELECT 1 FROM documents d WHERE d.id = document_id)
+);
 
 DROP POLICY IF EXISTS "Users can update own document content" ON document_content;
-CREATE POLICY "Users can update own document content" ON document_content FOR UPDATE
-USING (EXISTS (SELECT 1 FROM documents d WHERE d.id = document_id AND d.user_id = auth.uid()));
+CREATE POLICY "anduin can update document content" ON document_content FOR UPDATE
+USING (
+  split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com'
+  AND EXISTS (SELECT 1 FROM documents d WHERE d.id = document_id)
+);
 
 -- Document embeddings policies
 DROP POLICY IF EXISTS "Users can view own embeddings" ON document_embeddings;
-CREATE POLICY "Users can view own embeddings" ON document_embeddings FOR SELECT 
-USING (EXISTS (SELECT 1 FROM documents d WHERE d.id = document_id AND d.user_id = auth.uid()));
+CREATE POLICY "anduin can view embeddings" ON document_embeddings FOR SELECT 
+USING (
+  split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com'
+  AND EXISTS (SELECT 1 FROM documents d WHERE d.id = document_id)
+);
 
 DROP POLICY IF EXISTS "Users can insert own embeddings" ON document_embeddings;
-CREATE POLICY "Users can insert own embeddings" ON document_embeddings FOR INSERT 
-WITH CHECK (EXISTS (SELECT 1 FROM documents d WHERE d.id = document_id AND d.user_id = auth.uid()));
+CREATE POLICY "anduin can insert embeddings" ON document_embeddings FOR INSERT 
+WITH CHECK (
+  split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com'
+  AND EXISTS (SELECT 1 FROM documents d WHERE d.id = document_id)
+);
 
 -- Processing status policies
 DROP POLICY IF EXISTS "Users can view own processing status" ON processing_status;
-CREATE POLICY "Users can view own processing status" ON processing_status FOR SELECT 
-USING (EXISTS (SELECT 1 FROM documents d WHERE d.id = document_id AND d.user_id = auth.uid()));
+CREATE POLICY "anduin can view processing status" ON processing_status FOR SELECT 
+USING (
+  split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com'
+  AND EXISTS (SELECT 1 FROM documents d WHERE d.id = document_id)
+);
 
 DROP POLICY IF EXISTS "System can manage processing status" ON processing_status;
 CREATE POLICY "System can manage processing status" ON processing_status FOR ALL 
@@ -576,7 +601,8 @@ USING (true);
 
 -- Document jobs policies
 DROP POLICY IF EXISTS "Users can view own jobs" ON document_jobs;
-CREATE POLICY "Users can view own jobs" ON document_jobs FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "anduin can view jobs" ON document_jobs FOR SELECT 
+USING (split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com');
 DROP POLICY IF EXISTS "System can manage jobs" ON document_jobs;
 CREATE POLICY "System can manage jobs" ON document_jobs FOR ALL USING (true);
 
@@ -595,46 +621,42 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Storage policies: Users can upload their own documents
 DROP POLICY IF EXISTS "Users can upload documents" ON storage.objects;
-CREATE POLICY "Users can upload documents" ON storage.objects
-FOR INSERT
-TO authenticated
+CREATE POLICY "anduin can upload documents" ON storage.objects
+FOR INSERT TO authenticated
 WITH CHECK (
   bucket_id = 'documents' AND
-  auth.uid()::text = (storage.foldername(name))[1]
+  split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com'
 );
 
 -- Storage policies: Users can read their own documents
 DROP POLICY IF EXISTS "Users can read own documents" ON storage.objects;
-CREATE POLICY "Users can read own documents" ON storage.objects
-FOR SELECT
-TO authenticated
+CREATE POLICY "anduin can read documents" ON storage.objects
+FOR SELECT TO authenticated
 USING (
   bucket_id = 'documents' AND
-  auth.uid()::text = (storage.foldername(name))[1]
+  split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com'
 );
 
 -- Storage policies: Users can update their own documents (for rename/move operations)
 DROP POLICY IF EXISTS "Users can update own documents" ON storage.objects;
-CREATE POLICY "Users can update own documents" ON storage.objects
-FOR UPDATE
-TO authenticated
+CREATE POLICY "anduin can update documents" ON storage.objects
+FOR UPDATE TO authenticated
 USING (
   bucket_id = 'documents' AND
-  auth.uid()::text = (storage.foldername(name))[1]
+  split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com'
 )
 WITH CHECK (
   bucket_id = 'documents' AND
-  auth.uid()::text = (storage.foldername(name))[1]
+  split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com'
 );
 
 -- Storage policies: Users can delete their own documents
 DROP POLICY IF EXISTS "Users can delete own documents" ON storage.objects;
-CREATE POLICY "Users can delete own documents" ON storage.objects
-FOR DELETE
-TO authenticated
+CREATE POLICY "anduin can delete documents" ON storage.objects
+FOR DELETE TO authenticated
 USING (
   bucket_id = 'documents' AND
-  auth.uid()::text = (storage.foldername(name))[1]
+  split_part(auth.jwt()->>'email','@',2) = 'anduintransact.com'
 );
 
 -- Storage policies: Service role has full access

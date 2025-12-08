@@ -11,7 +11,6 @@ import { logger } from '@/lib/logger'
 type RawFilters = Record<string, unknown>
 
 const FILTER_OPERATOR_IN = '$in'
-const FILTER_OPERATOR_EQ = '$eq'
 const MAX_RESULT_LIMIT = 100
 
 const parsePositiveInteger = (value: string | undefined): number | undefined => {
@@ -93,18 +92,14 @@ function normalizeFilterEntry(value: unknown): { vectorDb: unknown; client: unkn
   }
 }
 
-function buildStage0Filters(rawFilters: RawFilters, userId: string): {
+function buildStage0Filters(rawFilters: RawFilters): {
   vectorFilters: Record<string, unknown>
   appliedFilters: Record<string, unknown>
 } {
-  const vectorFilters: Record<string, unknown> = {
-    user_id: { [FILTER_OPERATOR_EQ]: userId }
-  }
+  const vectorFilters: Record<string, unknown> = {}
   const appliedFilters: Record<string, unknown> = {}
 
   for (const [key, value] of Object.entries(rawFilters)) {
-    if (key === 'user_id') continue
-
     const normalized = normalizeFilterEntry(value)
     if (!normalized) continue
 
@@ -212,7 +207,7 @@ export async function POST(
       return authResult // Return error response
     }
 
-    const { userId, supabase } = authResult
+    const { supabase } = authResult
 
     // Parse request body for optional configuration
     const body = await request.json().catch(() => ({}))
@@ -245,7 +240,7 @@ export async function POST(
       ...metadataFilters
     } = rawFilters as RawFilters
 
-    const { vectorFilters, appliedFilters } = buildStage0Filters(metadataFilters, userId)
+    const { vectorFilters, appliedFilters } = buildStage0Filters(metadataFilters)
 
     const normalizedStage2Workers =
       stage2_parallelWorkers !== undefined
@@ -257,7 +252,6 @@ export async function POST(
       .from('documents')
       .select('id, title, status, centroid_embedding, effective_chunk_count, page_count, total_characters')
       .eq('id', id)
-      .eq('user_id', userId)
       .single()
 
     if (docError || !document) {
@@ -453,14 +447,13 @@ export async function GET(
       return authResult // Return error response
     }
 
-    const { userId, supabase } = authResult
+    const { supabase } = authResult
 
     // Verify document belongs to user
     const { data: document, error: docError } = await supabase
       .from('documents')
       .select('id, title, status, total_characters')
       .eq('id', id)
-      .eq('user_id', userId)
       .single()
 
     if (docError || !document) {

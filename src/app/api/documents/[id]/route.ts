@@ -20,7 +20,7 @@ export async function GET(
       return authResult // Return error response
     }
 
-    const { userId, supabase } = authResult
+    const { supabase } = authResult
 
     const { data: document, error: dbError } = await supabase
       .from('documents')
@@ -28,7 +28,6 @@ export async function GET(
         'id, user_id, title, filename, file_path, file_size, content_type, status, processing_error, extracted_fields, metadata, page_count, created_at, updated_at, document_content(extracted_text)'
       )
       .eq('id', id)
-      .eq('user_id', userId)
       .maybeSingle<DatabaseDocumentWithContent>()
 
     if (dbError) {
@@ -72,7 +71,6 @@ export async function DELETE(
         .from('documents')
         .select('file_path, filename')
         .eq('id', id)
-        .eq('user_id', userId)
         .single<{ file_path: string | null; filename: string | null }>()
 
       if (fetchError) {
@@ -118,7 +116,6 @@ export async function DELETE(
         .from('documents')
         .delete()
         .eq('id', id)
-        .eq('user_id', userId)
 
       if (deleteError) {
         logger.error('Documents API: database deletion error', deleteError)
@@ -173,12 +170,11 @@ export async function PATCH(
       return NextResponse.json({ error: 'Metadata or title is required' }, { status: 400 })
     }
 
-    // Verify the document exists and belongs to the user
+    // Fetch the document (shared access allowed via RLS)
     const { data: existingDocument, error: fetchError } = await supabase
       .from('documents')
       .select('id, user_id, title, filename, file_path, file_size, content_type, status, processing_error, extracted_fields, metadata, page_count, created_at, updated_at, document_content(extracted_text)')
       .eq('id', id)
-      .eq('user_id', userId)
       .maybeSingle<DatabaseDocumentWithContent>()
 
     if (fetchError) {
@@ -228,7 +224,7 @@ export async function PATCH(
         return NextResponse.json({ error: 'Document file path is missing' }, { status: 500 })
       }
 
-      // Extract directory path and validate it belongs to the user
+      // Extract directory path (keep existing folder structure)
       const lastSlashIndex = oldFilepath.lastIndexOf('/')
       if (lastSlashIndex === -1) {
         logger.error('Documents API: invalid file path format', undefined, { documentId: id, filePath: oldFilepath })
@@ -237,31 +233,7 @@ export async function PATCH(
 
       const directoryPath = oldFilepath.substring(0, lastSlashIndex + 1)
 
-      // Verify directory path starts with user ID (security check)
-      if (!directoryPath.startsWith(`${userId}/`)) {
-        logger.error('Documents API: path traversal attempt detected', undefined, {
-          documentId: id,
-          userId,
-          directoryPath
-        })
-        return NextResponse.json({
-          error: 'Invalid operation: File path does not belong to user'
-        }, { status: 403 })
-      }
-
       const newFilepath = directoryPath + newFilename
-
-      // Final validation: ensure new path still belongs to user
-      if (!newFilepath.startsWith(`${userId}/`)) {
-        logger.error('Documents API: path traversal attempt in final path', undefined, {
-          documentId: id,
-          userId,
-          newFilepath
-        })
-        return NextResponse.json({
-          error: 'Invalid operation: Security validation failed'
-        }, { status: 403 })
-      }
 
       // 3. Move the file in Supabase Storage
       const { error: moveError } = await supabase.storage
@@ -288,7 +260,6 @@ export async function PATCH(
       .from('documents')
       .update(updateData)
       .eq('id', id)
-      .eq('user_id', userId)
       .select('id, user_id, title, filename, file_path, file_size, content_type, status, processing_error, extracted_fields, metadata, page_count, created_at, updated_at, document_content(extracted_text)')
       .maybeSingle<DatabaseDocumentWithContent>()
 

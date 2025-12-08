@@ -78,7 +78,6 @@ export async function POST(request: NextRequest) {
       .from('documents')
       .select('id, title, status, centroid_embedding, effective_chunk_count, total_characters')
       .eq('id', sourceDocumentId)
-      .eq('user_id', userId)
       .single()
 
     if (sourceError || !sourceDocument) {
@@ -113,7 +112,6 @@ export async function POST(request: NextRequest) {
       .from('documents')
       .select('id, title, filename, file_size, file_path, content_type, status, page_count, created_at, updated_at, metadata, total_characters')
       .in('id', targetDocumentIds)
-      .eq('user_id', userId)
 
     if (targetError) {
       return NextResponse.json({

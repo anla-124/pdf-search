@@ -5,7 +5,7 @@ export function LoadingScreen() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50#0a1329] transition-colors duration-300">
       <div className="flex flex-col items-center gap-1 animate-fade">
         <Image
-          src="/mark-logo-color.png"
+          src="/logo/mark-logo-default.svg"
           alt="Logo"
           width={96}
           height={96}
