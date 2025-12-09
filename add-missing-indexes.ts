@@ -4,6 +4,9 @@
  * Run with: npx tsx add-missing-indexes.ts
  */
 
+/* eslint-disable no-console */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { QdrantClient } from '@qdrant/js-client-rest'
 import { config } from 'dotenv'
 import path from 'path'

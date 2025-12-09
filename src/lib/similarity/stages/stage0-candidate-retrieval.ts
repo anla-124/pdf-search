@@ -263,6 +263,7 @@ export async function stage0CandidateRetrieval(
     const timeMs = Date.now() - startTime
 
     // Enhanced error logging with safe property access
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const errorObj = error as any
     logger.error(
       'Stage 0 failed',

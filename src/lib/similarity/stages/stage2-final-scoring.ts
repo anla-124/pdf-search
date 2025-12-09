@@ -379,6 +379,8 @@ async function fetchDocumentChunks(
         .returns<Array<{
           chunk_index: number | null
           page_number: number | null
+          start_page_number: number | null
+          end_page_number: number | null
           embedding: number[] | string
           chunk_text: string | null
           character_count: number | null
@@ -410,6 +412,8 @@ async function fetchDocumentChunks(
         .map(record => ({
           chunk_index: record.chunk_index as number,
           page_number: typeof record.page_number === 'number' ? record.page_number : null,
+          start_page_number: typeof record.start_page_number === 'number' ? record.start_page_number : null,
+          end_page_number: typeof record.end_page_number === 'number' ? record.end_page_number : null,
           embedding: record.embedding,
           chunk_text: record.chunk_text,
           character_count: typeof record.character_count === 'number' ? record.character_count : null
