@@ -112,6 +112,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
   const [sortBy, setSortBy] = useState<string>('updated_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [bulkDeleteConfirmText, setBulkDeleteConfirmText] = useState('')
 
   // Metadata filters
   const [showFilters, setShowFilters] = useState(false)
@@ -139,6 +140,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
     isOpen: false,
     isDeleting: false
   })
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
   const [bulkDeleteState, setBulkDeleteState] = useState({
     total: 0,
     processed: 0,
@@ -990,9 +992,13 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
       setBulkDeleteState(prev => ({ ...prev, isDeleting: false }))
       setSelectedDocuments(new Set())
       setSourceForSelectionId(null)
+      setBulkDeleteDialogOpen(false)
+      setBulkDeleteConfirmText('')
     } catch (error) {
       clientLogger.error('Error in bulk delete:', error)
       setBulkDeleteState(prev => ({ ...prev, isDeleting: false }))
+      setBulkDeleteDialogOpen(false)
+      setBulkDeleteConfirmText('')
     }
   }
 
@@ -1247,7 +1253,11 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
             <Button
               size="sm"
               variant="destructive"
-              onClick={deleteSelectedDocuments}
+              onClick={() => {
+                if (bulkDeleteState.isDeleting) return
+                setBulkDeleteDialogOpen(true)
+                setBulkDeleteConfirmText('')
+              }}
               disabled={bulkDeleteState.isDeleting}
             >
               {bulkDeleteState.isDeleting ? (
@@ -2095,6 +2105,78 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                 </>
               ) : (
                 'Rename Document'
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Dialog */}
+      <AlertDialog
+        open={bulkDeleteDialogOpen}
+        onOpenChange={open => {
+          if (!open) {
+            if (bulkDeleteState.isDeleting) return
+            setBulkDeleteDialogOpen(false)
+            setBulkDeleteConfirmText('')
+          }
+        }}
+      >
+        <AlertDialogContent
+          onKeyDown={event => {
+            if (
+              event.key === 'Enter' &&
+              !bulkDeleteState.isDeleting &&
+              bulkDeleteConfirmText.trim() === 'delete-document' &&
+              selectedDocuments.size > 0
+            ) {
+              event.preventDefault()
+              deleteSelectedDocuments()
+            }
+          }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Documents</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedDocuments.size > 0
+                ? `Are you sure you want to delete ${selectedDocuments.size} document${selectedDocuments.size > 1 ? 's' : ''}? This action cannot be undone.`
+                : 'Are you sure you want to delete the selected documents? This action cannot be undone.'}
+            </AlertDialogDescription>
+            <div className="mt-3">
+              <p className="text-sm text-gray-600 mb-2">
+                Type "<span className="font-semibold">delete-document</span>" to confirm.
+              </p>
+              <Input
+                value={bulkDeleteConfirmText}
+                onChange={e => setBulkDeleteConfirmText(e.target.value)}
+                placeholder="delete-document"
+                autoFocus
+              />
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleteState.isDeleting}>Cancel</AlertDialogCancel>
+            <Button
+              type="button"
+              onClick={() => {
+                if (bulkDeleteState.isDeleting) return
+                if (bulkDeleteConfirmText.trim() !== 'delete-document') return
+                deleteSelectedDocuments()
+              }}
+              disabled={
+                bulkDeleteState.isDeleting ||
+                bulkDeleteConfirmText.trim() !== 'delete-document' ||
+                selectedDocuments.size === 0
+              }
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {bulkDeleteState.isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting... ({bulkDeleteState.processed}/{bulkDeleteState.total})
+                </>
+              ) : (
+                `Delete (${selectedDocuments.size})`
               )}
             </Button>
           </AlertDialogFooter>
