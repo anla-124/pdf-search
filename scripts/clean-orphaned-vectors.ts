@@ -3,6 +3,7 @@
  * Removes vectors for documents that don't exist in Supabase
  */
 
+/* eslint-disable no-console */
 import { createClient } from '@supabase/supabase-js'
 import { QdrantClient } from '@qdrant/js-client-rest'
 

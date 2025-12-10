@@ -45,10 +45,6 @@ interface PerformanceMetrics {
   metadata?: Record<string, unknown>
 }
 
-// Logger configuration based on environment
-const isDevelopment = process.env['NODE_ENV'] === 'development'
-const isTest = process.env['NODE_ENV'] === 'test'
-
 // Pino Logger Configuration
 const createPinoLogger = () => {
   const pinoConfig: pino.LoggerOptions = {
