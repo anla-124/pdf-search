@@ -82,7 +82,21 @@ export async function DELETE(
         return NextResponse.json({ error: 'Failed to fetch document' }, { status: 500 })
       }
 
-      // Delete from database FIRST (CASCADE will handle related records)
+      // Prefetch Qdrant vector IDs BEFORE database deletion (CASCADE will delete document_embeddings)
+      let vectorIds: string[] = []
+      try {
+        vectorIds = await getVectorIdsForDocument(id)
+        logger.debug('Documents API: prefetched Qdrant vector IDs for deletion', {
+          documentId: id,
+          vectorCount: vectorIds.length,
+        })
+      } catch (vectorError) {
+        logger.error('Documents API: failed to prefetch vector IDs', vectorError instanceof Error ? vectorError : new Error(String(vectorError)), {
+          documentId: id,
+        })
+      }
+
+      // Delete from database (CASCADE will handle related records)
       // Use service role client to bypass RLS (allows shared document management)
       const serviceClient = await createServiceClient()
 
@@ -111,20 +125,6 @@ export async function DELETE(
         }
       } finally {
         releaseServiceClient(serviceClient)
-      }
-
-      // Only proceed with storage and vector cleanup if database deletion succeeded
-      let vectorIds: string[] = []
-      try {
-        vectorIds = await getVectorIdsForDocument(id)
-        logger.debug('Documents API: prefetched Qdrant vector IDs for deletion', {
-          documentId: id,
-          vectorCount: vectorIds.length,
-        })
-      } catch (vectorError) {
-        logger.error('Documents API: failed to prefetch vector IDs', vectorError instanceof Error ? vectorError : new Error(String(vectorError)), {
-          documentId: id,
-        })
       }
 
       // Delete from storage (use service role for shared access)
