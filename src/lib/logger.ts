@@ -1,9 +1,8 @@
 /**
  * Enterprise-grade structured logging system
- * Supports both Winston and Pino loggers with request correlation
+ * Uses Pino logger with request correlation
  */
 
-import winston from 'winston'
 import pino from 'pino'
 import { AsyncLocalStorage } from 'async_hooks'
 import { loggingConfig } from './logger-config'
@@ -48,68 +47,9 @@ interface PerformanceMetrics {
 
 // Logger configuration based on environment
 const isDevelopment = process.env['NODE_ENV'] === 'development'
-const isProduction = process.env['NODE_ENV'] === 'production'
 const isTest = process.env['NODE_ENV'] === 'test'
 
-// Winston Logger Configuration
-const createWinstonLogger = () => {
-  const transports: winston.transport[] = []
-
-  // Console transport for development
-  if (isDevelopment || isTest) {
-    transports.push(
-      new winston.transports.Console({
-        format: winston.format.combine(
-          winston.format.colorize(),
-          winston.format.timestamp(),
-          winston.format.errors({ stack: true }),
-          winston.format.printf(({ timestamp, level, message, ...meta }) => {
-            const context = asyncLocalStorage.getStore()
-            const correlationId = context?.correlationId || meta['correlationId'] || 'no-correlation'
-            const metaStr = Object.keys(meta).length > 0 ? JSON.stringify(meta, null, 2) : ''
-            return `${timestamp} [${level}] [${correlationId}] ${message} ${metaStr}`
-          })
-        )
-      })
-    )
-  }
-
-  // File transports for production
-  if (isProduction) {
-    transports.push(
-      new winston.transports.File({
-        filename: 'logs/error.log',
-        level: 'error',
-        format: winston.format.combine(
-          winston.format.timestamp(),
-          winston.format.errors({ stack: true }),
-          winston.format.json()
-        )
-      }),
-      new winston.transports.File({
-        filename: 'logs/combined.log',
-        format: winston.format.combine(
-          winston.format.timestamp(),
-          winston.format.errors({ stack: true }),
-          winston.format.json()
-        )
-      })
-    )
-  }
-
-  return winston.createLogger({
-    level: loggingConfig.logLevel,
-    defaultMeta: {
-      service: 'pdf-searcher',
-      version: process.env['APP_VERSION'] || '1.0.0',
-      environment: process.env['NODE_ENV'] || 'development'
-    },
-    transports,
-    exitOnError: false
-  })
-}
-
-// Pino Logger Configuration (faster, better for high-throughput)
+// Pino Logger Configuration
 const createPinoLogger = () => {
   const pinoConfig: pino.LoggerOptions = {
     level: loggingConfig.logLevel,
@@ -150,23 +90,15 @@ const createPinoLogger = () => {
   return pino(pinoConfig)
 }
 
-// Choose logger based on preference (Winston for development, Pino for production)
-const useWinston = process.env['USE_WINSTON'] === 'true' || isDevelopment
-const winstonLogger = useWinston ? createWinstonLogger() : null
-const pinoLogger = !useWinston ? createPinoLogger() : null
+// Create Pino logger instance
+const pinoLogger = createPinoLogger()
 
 // Unified Logger Interface
 class Logger {
-  private winston?: winston.Logger
-  private pino?: pino.Logger
+  private pino: pino.Logger
 
   constructor() {
-    if (winstonLogger) {
-      this.winston = winstonLogger
-    }
-    if (pinoLogger) {
-      this.pino = pinoLogger
-    }
+    this.pino = pinoLogger
   }
 
   private enrichMetadata(meta: LogMetadata = {}): LogMetadata {
@@ -188,55 +120,40 @@ class Logger {
 
   debug(message: string, meta: LogMetadata = {}): void {
     const enrichedMeta = this.enrichMetadata(meta)
-    if (this.winston) {
-      this.winston.debug(message, enrichedMeta)
-    }
-    if (this.pino) {
-      try {
-        this.pino.debug(enrichedMeta, message)
-      } catch (error) {
-        console.warn('[LOGGER][DEBUG] pino debug failed, falling back to console output', {
-          message,
-          metadata: enrichedMeta,
-          error: error instanceof Error ? error.message : String(error)
-        })
-      }
+    try {
+      this.pino.debug(enrichedMeta, message)
+    } catch (error) {
+      console.warn('[LOGGER][DEBUG] pino debug failed, falling back to console output', {
+        message,
+        metadata: enrichedMeta,
+        error: error instanceof Error ? error.message : String(error)
+      })
     }
   }
 
   info(message: string, meta: LogMetadata = {}): void {
     const enrichedMeta = this.enrichMetadata(meta)
-    if (this.winston) {
-      this.winston.info(message, enrichedMeta)
-    }
-    if (this.pino) {
-      try {
-        this.pino.info(enrichedMeta, message)
-      } catch (error) {
-        console.warn('[LOGGER][INFO] pino info failed, falling back to console output', {
-          message,
-          metadata: enrichedMeta,
-          error: error instanceof Error ? error.message : String(error)
-        })
-      }
+    try {
+      this.pino.info(enrichedMeta, message)
+    } catch (error) {
+      console.warn('[LOGGER][INFO] pino info failed, falling back to console output', {
+        message,
+        metadata: enrichedMeta,
+        error: error instanceof Error ? error.message : String(error)
+      })
     }
   }
 
   warn(message: string, meta: LogMetadata = {}): void {
     const enrichedMeta = this.enrichMetadata(meta)
-    if (this.winston) {
-      this.winston.warn(message, enrichedMeta)
-    }
-    if (this.pino) {
-      try {
-        this.pino.warn(enrichedMeta, message)
-      } catch (error) {
-        console.warn('[LOGGER][WARN] pino warn failed, falling back to console output', {
-          message,
-          metadata: enrichedMeta,
-          error: error instanceof Error ? error.message : String(error)
-        })
-      }
+    try {
+      this.pino.warn(enrichedMeta, message)
+    } catch (error) {
+      console.warn('[LOGGER][WARN] pino warn failed, falling back to console output', {
+        message,
+        metadata: enrichedMeta,
+        error: error instanceof Error ? error.message : String(error)
+      })
     }
   }
 
@@ -249,20 +166,15 @@ class Logger {
         name: error.name
       } : undefined
     })
-    
-    if (this.winston) {
-      this.winston.error(message, enrichedMeta)
-    }
-    if (this.pino) {
-      try {
-        this.pino.error(enrichedMeta, message)
-      } catch (error) {
-        console.warn('[LOGGER][ERROR] pino error failed, falling back to console output', {
-          message,
-          metadata: enrichedMeta,
-          error: error instanceof Error ? error.message : String(error)
-        })
-      }
+
+    try {
+      this.pino.error(enrichedMeta, message)
+    } catch (error) {
+      console.warn('[LOGGER][ERROR] pino error failed, falling back to console output', {
+        message,
+        metadata: enrichedMeta,
+        error: error instanceof Error ? error.message : String(error)
+      })
     }
   }
 
