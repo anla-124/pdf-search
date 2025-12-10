@@ -1,4 +1,5 @@
 import { format } from 'date-fns'
+import { logger } from '@/lib/logger'
 
 /**
  * Formats a date string from the database to a user-friendly format
@@ -27,7 +28,7 @@ export function formatUploadDate(dateString: string): string {
     
     return format(displayDate, 'dd MMM yyyy - h:mm a')
   } catch (error) {
-    console.error('[date-utils] Error formatting date:', error instanceof Error ? error.message : 'Unknown error', { dateString })
+    logger.error('[date-utils] Error formatting date', error instanceof Error ? error : new Error(String(error)), { dateString })
     return 'Invalid date'
   }
 }

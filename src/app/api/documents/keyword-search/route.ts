@@ -20,6 +20,7 @@
  */
 
 import { createClient } from '@/lib/supabase/server'
+import { logger } from '@/lib/logger'
 import { NextRequest, NextResponse } from 'next/server'
 import type {
   KeywordSearchRequest,
@@ -139,8 +140,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (error) {
-      console.error('Keyword search database error:', {
-        error: error.message,
+      logger.error('Keyword search database error', new Error(error.message), {
         code: error.code,
         details: error.details,
         hint: error.hint,
@@ -209,10 +209,13 @@ export async function POST(request: NextRequest) {
       }
     })
   } catch (error) {
-    console.error('Unexpected error in keyword search:', {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined
-    })
+    logger.error(
+      'Unexpected error in keyword search',
+      error instanceof Error ? error : new Error(String(error)),
+      {
+        stack: error instanceof Error ? error.stack : undefined
+      }
+    )
 
     return NextResponse.json(
       { error: 'Internal server error' },

@@ -83,10 +83,3 @@ export interface Stage1Result {
   matchCounts: number[]
   timeMs: number
 }
-
-export interface SearchOptions {
-  topK?: number
-  threshold?: number
-  filters?: Record<string, unknown>
-  parallelWorkers?: number
-}
