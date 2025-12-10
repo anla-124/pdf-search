@@ -83,27 +83,34 @@ export async function DELETE(
       }
 
       // Delete from database FIRST (CASCADE will handle related records)
-      // IMPORTANT: Use .select() to get the deleted row count and verify deletion succeeded
-      const { data: deletedRows, error: deleteError } = await supabase
-        .from('documents')
-        .delete()
-        .eq('id', id)
-        .select()
+      // Use service role client to bypass RLS (allows shared document management)
+      const serviceClient = await createServiceClient()
 
-      if (deleteError) {
-        logger.error('Documents API: database deletion error', deleteError)
-        return NextResponse.json({ error: 'Failed to delete document' }, { status: 500 })
-      }
+      try {
+        // IMPORTANT: Use .select() to get the deleted row count and verify deletion succeeded
+        const { data: deletedRows, error: deleteError } = await serviceClient
+          .from('documents')
+          .delete()
+          .eq('id', id)
+          .select()
 
-      // Check if any rows were actually deleted (RLS might have filtered the document)
-      if (!deletedRows || deletedRows.length === 0) {
-        logger.warn('Documents API: delete returned success but 0 rows affected - likely RLS policy preventing deletion', {
-          documentId: id,
-          userId: userId
-        })
-        return NextResponse.json({
-          error: 'Document not found or you do not have permission to delete it'
-        }, { status: 403 })
+        if (deleteError) {
+          logger.error('Documents API: database deletion error', deleteError)
+          return NextResponse.json({ error: 'Failed to delete document' }, { status: 500 })
+        }
+
+        // Check if any rows were actually deleted
+        if (!deletedRows || deletedRows.length === 0) {
+          logger.warn('Documents API: document not found for deletion', {
+            documentId: id,
+            userId: userId
+          })
+          return NextResponse.json({
+            error: 'Document not found'
+          }, { status: 404 })
+        }
+      } finally {
+        releaseServiceClient(serviceClient)
       }
 
       // Only proceed with storage and vector cleanup if database deletion succeeded
@@ -120,15 +127,20 @@ export async function DELETE(
         })
       }
 
-      // Delete from storage
+      // Delete from storage (use service role for shared access)
       const filePath = typeof document?.file_path === 'string' ? document.file_path : null
       if (filePath) {
-        const { error: storageError } = await supabase.storage
-          .from('documents')
-          .remove([filePath])
+        const storageClient = await createServiceClient()
+        try {
+          const { error: storageError } = await storageClient.storage
+            .from('documents')
+            .remove([filePath])
 
-        if (storageError) {
-          logger.error('Documents API: storage deletion error', storageError)
+          if (storageError) {
+            logger.error('Documents API: storage deletion error', storageError)
+          }
+        } finally {
+          releaseServiceClient(storageClient)
         }
       } else {
         logger.warn('Documents API: document missing file_path during deletion', { documentId: id })
