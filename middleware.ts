@@ -64,6 +64,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
+  // Protect admin routes - require admin role
+  if (user && request.nextUrl.pathname.startsWith('/admin')) {
+    // Fetch user role from public.users table
+    const { data: userData } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (userData?.role !== 'admin') {
+      // Redirect non-admin users to dashboard
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+  }
+
   return response
 }
 

@@ -50,12 +50,7 @@ import {
   RotateCcw,
   ArrowUpDown
 } from 'lucide-react'
-import {
-  LAW_FIRM_OPTIONS,
-  FUND_MANAGER_OPTIONS,
-  FUND_ADMIN_OPTIONS,
-  JURISDICTION_OPTIONS
-} from '@/lib/metadata-constants'
+import { useMetadataOptions } from '@/hooks/use-metadata-options'
 import { format } from 'date-fns'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { clientLogger } from '@/lib/client-logger'
@@ -113,6 +108,12 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [bulkDeleteConfirmText, setBulkDeleteConfirmText] = useState('')
+
+  // Fetch metadata options from API
+  const { options: lawFirmOptions } = useMetadataOptions('law_firm')
+  const { options: fundManagerOptions } = useMetadataOptions('fund_manager')
+  const { options: fundAdminOptions } = useMetadataOptions('fund_admin')
+  const { options: jurisdictionOptions } = useMetadataOptions('jurisdiction')
 
   // Metadata filters
   const [showFilters, setShowFilters] = useState(false)
@@ -1409,7 +1410,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                   Law Firm
                 </Label>
                 <SearchableMultiSelect
-                  options={[...LAW_FIRM_OPTIONS, { value: '(blank)', label: '(blank)' }]}
+                  options={[...lawFirmOptions, { value: '(blank)', label: '(blank)' }]}
                   values={lawFirmFilter}
                   onValuesChange={setLawFirmFilter}
                   placeholder="Select law firms..."
@@ -1424,7 +1425,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                   Fund Manager
                 </Label>
                 <SearchableMultiSelect
-                  options={[...FUND_MANAGER_OPTIONS, { value: '(blank)', label: '(blank)' }]}
+                  options={[...fundManagerOptions, { value: '(blank)', label: '(blank)' }]}
                   values={fundManagerFilter}
                   onValuesChange={setFundManagerFilter}
                   placeholder="Select fund managers..."
@@ -1439,7 +1440,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                   Fund Admin
                 </Label>
                 <SearchableMultiSelect
-                  options={[...FUND_ADMIN_OPTIONS, { value: '(blank)', label: '(blank)' }]}
+                  options={[...fundAdminOptions, { value: '(blank)', label: '(blank)' }]}
                   values={fundAdminFilter}
                   onValuesChange={setFundAdminFilter}
                   placeholder="Select fund admins..."
@@ -1454,7 +1455,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                   Jurisdiction
                 </Label>
                 <SearchableMultiSelect
-                  options={[...JURISDICTION_OPTIONS, { value: '(blank)', label: '(blank)' }]}
+                  options={[...jurisdictionOptions, { value: '(blank)', label: '(blank)' }]}
                   values={jurisdictionFilter}
                   onValuesChange={setJurisdictionFilter}
                   placeholder="Select jurisdictions..."
@@ -1727,7 +1728,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                               <div className="flex items-center gap-1.5">
                                 <Scale className="h-3 w-3 flex-shrink-0 text-gray-400" />
                                 {document.metadata?.law_firm ? (
-                                  <span className="truncate text-gray-600">{resolveOptionLabel(document.metadata.law_firm, LAW_FIRM_OPTIONS)}</span>
+                                  <span className="truncate text-gray-600">{resolveOptionLabel(document.metadata.law_firm, lawFirmOptions)}</span>
                                 ) : (
                                   <span className="truncate text-orange-500">(blank)</span>
                                 )}
@@ -1735,7 +1736,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                               <div className="flex items-center gap-1.5">
                                 <UserCircle className="h-3 w-3 flex-shrink-0 text-gray-400" />
                                 {document.metadata?.fund_manager ? (
-                                  <span className="truncate text-gray-600">{resolveOptionLabel(document.metadata.fund_manager, FUND_MANAGER_OPTIONS)}</span>
+                                  <span className="truncate text-gray-600">{resolveOptionLabel(document.metadata.fund_manager, fundManagerOptions)}</span>
                                 ) : (
                                   <span className="truncate text-orange-500">(blank)</span>
                                 )}
@@ -1743,7 +1744,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                               <div className="flex items-center gap-1.5">
                                 <ClipboardList className="h-3 w-3 flex-shrink-0 text-gray-400" />
                                 {document.metadata?.fund_admin ? (
-                                  <span className="truncate text-gray-600">{resolveOptionLabel(document.metadata.fund_admin, FUND_ADMIN_OPTIONS)}</span>
+                                  <span className="truncate text-gray-600">{resolveOptionLabel(document.metadata.fund_admin, fundAdminOptions)}</span>
                                 ) : (
                                   <span className="truncate text-orange-500">(blank)</span>
                                 )}
@@ -1751,7 +1752,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                               <div className="flex items-center gap-1.5">
                                 <Globe className="h-3 w-3 flex-shrink-0 text-gray-400" />
                                 {document.metadata?.jurisdiction ? (
-                                  <span className="truncate text-gray-600">{resolveOptionLabel(document.metadata.jurisdiction, JURISDICTION_OPTIONS)}</span>
+                                  <span className="truncate text-gray-600">{resolveOptionLabel(document.metadata.jurisdiction, jurisdictionOptions)}</span>
                                 ) : (
                                   <span className="truncate text-orange-500">(blank)</span>
                                 )}

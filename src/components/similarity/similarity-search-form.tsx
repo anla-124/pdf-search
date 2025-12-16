@@ -12,12 +12,7 @@ import { Slider } from '@/components/ui/slider'
 import { Input } from '@/components/ui/input'
 import { Search, Loader2, RotateCcw, X, Scale, UserCircle, ClipboardList, Globe } from 'lucide-react'
 import { SimilarityResultsV2 } from './similarity-results-v2'
-import {
-  LAW_FIRM_OPTIONS,
-  FUND_MANAGER_OPTIONS,
-  FUND_ADMIN_OPTIONS,
-  JURISDICTION_OPTIONS,
-} from '@/lib/metadata-constants'
+import { useMetadataOptions } from '@/hooks/use-metadata-options'
 import { clientLogger } from '@/lib/client-logger'
 import { cn } from '@/lib/utils'
 
@@ -41,6 +36,12 @@ export function SimilaritySearchForm({ documentId, sourceDocument }: SimilarityS
   const [topK, setTopK] = useState(10)
   const abortControllerRef = useRef<AbortController | null>(null)
   const requestIdRef = useRef(0)
+
+  // Fetch metadata options from API
+  const { options: lawFirmOptions } = useMetadataOptions('law_firm')
+  const { options: fundManagerOptions } = useMetadataOptions('fund_manager')
+  const { options: fundAdminOptions } = useMetadataOptions('fund_admin')
+  const { options: jurisdictionOptions } = useMetadataOptions('jurisdiction')
 
   const pageRange = filters.page_range
   const isPageRangeActive = pageRange?.use_entire_document === false
@@ -295,7 +296,7 @@ export function SimilaritySearchForm({ documentId, sourceDocument }: SimilarityS
                   Law Firm
                 </Label>
                 <SearchableMultiSelect
-                  options={LAW_FIRM_OPTIONS}
+                  options={lawFirmOptions}
                   values={filters.law_firm ?? []}
                   onValuesChange={(values) =>
                     setFilters(prev => ({
@@ -315,7 +316,7 @@ export function SimilaritySearchForm({ documentId, sourceDocument }: SimilarityS
                   Fund Manager
                 </Label>
                 <SearchableMultiSelect
-                  options={FUND_MANAGER_OPTIONS}
+                  options={fundManagerOptions}
                   values={filters.fund_manager ?? []}
                   onValuesChange={(values) =>
                     setFilters(prev => ({
@@ -335,7 +336,7 @@ export function SimilaritySearchForm({ documentId, sourceDocument }: SimilarityS
                   Fund Admin
                 </Label>
                 <SearchableMultiSelect
-                  options={FUND_ADMIN_OPTIONS}
+                  options={fundAdminOptions}
                   values={filters.fund_admin ?? []}
                   onValuesChange={(values) =>
                     setFilters(prev => ({
@@ -355,7 +356,7 @@ export function SimilaritySearchForm({ documentId, sourceDocument }: SimilarityS
                   Jurisdiction
                 </Label>
                 <SearchableMultiSelect
-                  options={JURISDICTION_OPTIONS}
+                  options={jurisdictionOptions}
                   values={filters.jurisdiction ?? []}
                   onValuesChange={(values) =>
                     setFilters(prev => ({

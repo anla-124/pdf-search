@@ -17,12 +17,8 @@ import {
   Globe
 } from 'lucide-react'
 import { formatUploadDate } from '@/lib/date-utils'
-import {
-  LAW_FIRM_OPTIONS,
-  FUND_MANAGER_OPTIONS,
-  FUND_ADMIN_OPTIONS,
-  JURISDICTION_OPTIONS
-} from '@/lib/metadata-constants'
+import { getAllApprovedMetadataOptions } from '@/lib/metadata-options-server'
+import type { MetadataOption } from '@/lib/metadata-options-server'
 import { SourceDocumentActions } from '@/components/similarity/source-document-actions'
 import type { Metadata } from 'next'
 
@@ -33,8 +29,6 @@ export const metadata: Metadata = {
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
-
-type MetadataOption = { value: string; label: string }
 
 const resolveOptionLabel = (value: unknown, options: ReadonlyArray<MetadataOption>): string => {
   if (typeof value !== 'string' || value.length === 0) {
@@ -54,7 +48,7 @@ const formatFileSize = (bytes?: number | null) => {
 export default async function SelectedSearchPage({ searchParams }: PageProps) {
   const params = await searchParams
   const idsParam = typeof params['ids'] === 'string' ? params['ids'] : undefined
-  
+
   // New logic: derive source and targets from a single 'ids' parameter
   let sourceId: string | undefined = undefined
   let targetIds: string[] = []
@@ -68,8 +62,11 @@ export default async function SelectedSearchPage({ searchParams }: PageProps) {
       targetIds = allIds.slice(1) // The rest are targets
     }
   }
-  
+
   const supabase = await createClient()
+
+  // Fetch metadata options for label resolution
+  const metadataOptions = await getAllApprovedMetadataOptions()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
@@ -146,7 +143,7 @@ export default async function SelectedSearchPage({ searchParams }: PageProps) {
                       <div className="flex items-center gap-1">
                         <Scale className="h-3 w-3 text-gray-400" />
                         {sourceDocument.metadata?.law_firm ? (
-                          <span className="text-gray-600">{resolveOptionLabel(sourceDocument.metadata?.law_firm, LAW_FIRM_OPTIONS)}</span>
+                          <span className="text-gray-600">{resolveOptionLabel(sourceDocument.metadata?.law_firm, metadataOptions.law_firm)}</span>
                         ) : (
                           <span className="text-orange-500">(blank)</span>
                         )}
@@ -154,7 +151,7 @@ export default async function SelectedSearchPage({ searchParams }: PageProps) {
                       <div className="flex items-center gap-1">
                         <UserCircle className="h-3 w-3 text-gray-400" />
                         {sourceDocument.metadata?.fund_manager ? (
-                          <span className="text-gray-600">{resolveOptionLabel(sourceDocument.metadata?.fund_manager, FUND_MANAGER_OPTIONS)}</span>
+                          <span className="text-gray-600">{resolveOptionLabel(sourceDocument.metadata?.fund_manager, metadataOptions.fund_manager)}</span>
                         ) : (
                           <span className="text-orange-500">(blank)</span>
                         )}
@@ -162,7 +159,7 @@ export default async function SelectedSearchPage({ searchParams }: PageProps) {
                       <div className="flex items-center gap-1">
                         <ClipboardList className="h-3 w-3 text-gray-400" />
                         {sourceDocument.metadata?.fund_admin ? (
-                          <span className="text-gray-600">{resolveOptionLabel(sourceDocument.metadata?.fund_admin, FUND_ADMIN_OPTIONS)}</span>
+                          <span className="text-gray-600">{resolveOptionLabel(sourceDocument.metadata?.fund_admin, metadataOptions.fund_admin)}</span>
                         ) : (
                           <span className="text-orange-500">(blank)</span>
                         )}
@@ -170,7 +167,7 @@ export default async function SelectedSearchPage({ searchParams }: PageProps) {
                       <div className="flex items-center gap-1">
                         <Globe className="h-3 w-3 text-gray-400" />
                         {sourceDocument.metadata?.jurisdiction ? (
-                          <span className="text-gray-600">{resolveOptionLabel(sourceDocument.metadata?.jurisdiction, JURISDICTION_OPTIONS)}</span>
+                          <span className="text-gray-600">{resolveOptionLabel(sourceDocument.metadata?.jurisdiction, metadataOptions.jurisdiction)}</span>
                         ) : (
                           <span className="text-orange-500">(blank)</span>
                         )}

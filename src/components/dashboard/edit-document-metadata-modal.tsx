@@ -8,16 +8,7 @@ import { Label } from '@/components/ui/label'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Building, Users, Briefcase, Globe, Loader2 } from 'lucide-react'
 import { clientLogger } from '@/lib/client-logger'
-import { 
-  LAW_FIRM_OPTIONS, 
-  FUND_MANAGER_OPTIONS, 
-  FUND_ADMIN_OPTIONS, 
-  JURISDICTION_OPTIONS,
-  type LawFirmOption,
-  type FundManagerOption,
-  type FundAdminOption,
-  type JurisdictionOption
-} from '@/lib/metadata-constants'
+import { useMetadataOptions } from '@/hooks/use-metadata-options'
 
 interface EditDocumentMetadataModalProps {
   document: Document | null
@@ -27,21 +18,21 @@ interface EditDocumentMetadataModalProps {
 }
 
 interface EditableMetadata {
-  law_firm: LawFirmOption | ''
-  fund_manager: FundManagerOption | ''
-  fund_admin: FundAdminOption | ''
-  jurisdiction: JurisdictionOption | ''
+  law_firm: string
+  fund_manager: string
+  fund_admin: string
+  jurisdiction: string
 }
 
-const coerceMetadataValue = <T extends string>(value: unknown): T | '' => {
-  return typeof value === 'string' && value.length > 0 ? (value as T) : ''
+const coerceMetadataValue = (value: unknown): string => {
+  return typeof value === 'string' && value.length > 0 ? value : ''
 }
 
-export function EditDocumentMetadataModal({ 
-  document: currentDocument, 
-  isOpen, 
-  onClose, 
-  onSuccess 
+export function EditDocumentMetadataModal({
+  document: currentDocument,
+  isOpen,
+  onClose,
+  onSuccess
 }: EditDocumentMetadataModalProps) {
   const [metadata, setMetadata] = useState<EditableMetadata>({
     law_firm: '',
@@ -52,14 +43,20 @@ export function EditDocumentMetadataModal({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
+  // Fetch metadata options from API
+  const { options: lawFirmOptions } = useMetadataOptions('law_firm')
+  const { options: fundManagerOptions } = useMetadataOptions('fund_manager')
+  const { options: fundAdminOptions } = useMetadataOptions('fund_admin')
+  const { options: jurisdictionOptions } = useMetadataOptions('jurisdiction')
+
   // Initialize metadata when document changes
   useEffect(() => {
     if (currentDocument && isOpen) {
       setMetadata({
-        law_firm: coerceMetadataValue<LawFirmOption>(currentDocument.metadata?.law_firm),
-        fund_manager: coerceMetadataValue<FundManagerOption>(currentDocument.metadata?.fund_manager),
-        fund_admin: coerceMetadataValue<FundAdminOption>(currentDocument.metadata?.fund_admin),
-        jurisdiction: coerceMetadataValue<JurisdictionOption>(currentDocument.metadata?.jurisdiction)
+        law_firm: coerceMetadataValue(currentDocument.metadata?.law_firm),
+        fund_manager: coerceMetadataValue(currentDocument.metadata?.fund_manager),
+        fund_admin: coerceMetadataValue(currentDocument.metadata?.fund_admin),
+        jurisdiction: coerceMetadataValue(currentDocument.metadata?.jurisdiction)
       })
       setError('')
     }
@@ -69,10 +66,10 @@ export function EditDocumentMetadataModal({
   const handleOpenChange = (open: boolean) => {
     if (open && currentDocument) {
       setMetadata({
-        law_firm: coerceMetadataValue<LawFirmOption>(currentDocument.metadata?.law_firm),
-        fund_manager: coerceMetadataValue<FundManagerOption>(currentDocument.metadata?.fund_manager),
-        fund_admin: coerceMetadataValue<FundAdminOption>(currentDocument.metadata?.fund_admin),
-        jurisdiction: coerceMetadataValue<JurisdictionOption>(currentDocument.metadata?.jurisdiction)
+        law_firm: coerceMetadataValue(currentDocument.metadata?.law_firm),
+        fund_manager: coerceMetadataValue(currentDocument.metadata?.fund_manager),
+        fund_admin: coerceMetadataValue(currentDocument.metadata?.fund_admin),
+        jurisdiction: coerceMetadataValue(currentDocument.metadata?.jurisdiction)
       })
       setError('')
     } else if (!open) {
@@ -145,10 +142,10 @@ export function EditDocumentMetadataModal({
                 Law Firm
               </Label>
               <SearchableSelect
-                options={LAW_FIRM_OPTIONS as unknown as {value: string; label: string}[]}
+                options={lawFirmOptions}
                 value={metadata.law_firm}
                 onValueChange={(value: string) =>
-                  setMetadata(prev => ({ ...prev, law_firm: value as LawFirmOption }))
+                  setMetadata(prev => ({ ...prev, law_firm: value }))
                 }
                 placeholder="Please select a law firm"
                 searchPlaceholder="Search law firms..."
@@ -164,10 +161,10 @@ export function EditDocumentMetadataModal({
                 Fund Manager
               </Label>
               <SearchableSelect
-                options={FUND_MANAGER_OPTIONS as unknown as {value: string; label: string}[]}
+                options={fundManagerOptions}
                 value={metadata.fund_manager}
                 onValueChange={(value: string) =>
-                  setMetadata(prev => ({ ...prev, fund_manager: value as FundManagerOption }))
+                  setMetadata(prev => ({ ...prev, fund_manager: value }))
                 }
                 placeholder="Please select a fund manager"
                 searchPlaceholder="Search fund managers..."
@@ -183,10 +180,10 @@ export function EditDocumentMetadataModal({
                 Fund Admin
               </Label>
               <SearchableSelect
-                options={FUND_ADMIN_OPTIONS as unknown as {value: string; label: string}[]}
+                options={fundAdminOptions}
                 value={metadata.fund_admin}
                 onValueChange={(value: string) =>
-                  setMetadata(prev => ({ ...prev, fund_admin: value as FundAdminOption }))
+                  setMetadata(prev => ({ ...prev, fund_admin: value }))
                 }
                 placeholder="Please select a fund admin"
                 searchPlaceholder="Search fund admins..."
@@ -202,10 +199,10 @@ export function EditDocumentMetadataModal({
                 Jurisdiction
               </Label>
               <SearchableSelect
-                options={JURISDICTION_OPTIONS as unknown as {value: string; label: string}[]}
+                options={jurisdictionOptions}
                 value={metadata.jurisdiction}
                 onValueChange={(value: string) =>
-                  setMetadata(prev => ({ ...prev, jurisdiction: value as JurisdictionOption }))
+                  setMetadata(prev => ({ ...prev, jurisdiction: value }))
                 }
                 placeholder="Please select a jurisdiction"
                 searchPlaceholder="Search jurisdictions..."

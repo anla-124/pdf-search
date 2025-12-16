@@ -18,12 +18,7 @@ import {
   ArrowDown,
   ArrowUpDown
 } from 'lucide-react'
-import {
-  LAW_FIRM_OPTIONS,
-  FUND_MANAGER_OPTIONS,
-  FUND_ADMIN_OPTIONS,
-  JURISDICTION_OPTIONS
-} from '@/lib/metadata-constants'
+import { useMetadataOptions } from '@/hooks/use-metadata-options'
 import { format } from 'date-fns'
 import { clientLogger } from '@/lib/client-logger'
 import { useResizableColumns } from '@/hooks/useResizableColumns'
@@ -83,6 +78,12 @@ export function SearchResultsTable({
     results: 180,
     actions: 280
   })
+
+  // Fetch metadata options from API
+  const { options: lawFirmOptions } = useMetadataOptions('law_firm')
+  const { options: fundManagerOptions } = useMetadataOptions('fund_manager')
+  const { options: fundAdminOptions } = useMetadataOptions('fund_admin')
+  const { options: jurisdictionOptions } = useMetadataOptions('jurisdiction')
 
   // Theme colors
   const themeColors = useMemo(() => {
@@ -403,7 +404,7 @@ export function SearchResultsTable({
                       <Scale className="h-3 w-3 flex-shrink-0 text-gray-400" />
                       {result.document.metadata?.law_firm ? (
                         <span className="truncate text-gray-600">
-                          {resolveOptionLabel(result.document.metadata.law_firm, LAW_FIRM_OPTIONS)}
+                          {resolveOptionLabel(result.document.metadata.law_firm, lawFirmOptions)}
                         </span>
                       ) : (
                         <span className="truncate text-orange-500">(blank)</span>
@@ -413,7 +414,7 @@ export function SearchResultsTable({
                       <UserCircle className="h-3 w-3 flex-shrink-0 text-gray-400" />
                       {result.document.metadata?.fund_manager ? (
                         <span className="truncate text-gray-600">
-                          {resolveOptionLabel(result.document.metadata.fund_manager, FUND_MANAGER_OPTIONS)}
+                          {resolveOptionLabel(result.document.metadata.fund_manager, fundManagerOptions)}
                         </span>
                       ) : (
                         <span className="truncate text-orange-500">(blank)</span>
@@ -423,7 +424,7 @@ export function SearchResultsTable({
                       <ClipboardList className="h-3 w-3 flex-shrink-0 text-gray-400" />
                       {result.document.metadata?.fund_admin ? (
                         <span className="truncate text-gray-600">
-                          {resolveOptionLabel(result.document.metadata.fund_admin, FUND_ADMIN_OPTIONS)}
+                          {resolveOptionLabel(result.document.metadata.fund_admin, fundAdminOptions)}
                         </span>
                       ) : (
                         <span className="truncate text-orange-500">(blank)</span>
@@ -433,7 +434,7 @@ export function SearchResultsTable({
                       <Globe className="h-3 w-3 flex-shrink-0 text-gray-400" />
                       {result.document.metadata?.jurisdiction ? (
                         <span className="truncate text-gray-600">
-                          {resolveOptionLabel(result.document.metadata.jurisdiction, JURISDICTION_OPTIONS)}
+                          {resolveOptionLabel(result.document.metadata.jurisdiction, jurisdictionOptions)}
                         </span>
                       ) : (
                         <span className="truncate text-orange-500">(blank)</span>

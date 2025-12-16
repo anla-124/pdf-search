@@ -1,30 +1,17 @@
 'use client'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 import { LogOut } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import type { ComponentType, SVGProps } from 'react'
 import { clientLogger } from '@/lib/client-logger'
-
-// Type definition for navigation items
-type NavigationItem = {
-  name: string
-  href: string
-  icon: ComponentType<SVGProps<SVGSVGElement>>
-  badge?: string
-}
-
-const navigation: NavigationItem[] = []
 
 export function Sidebar() {
   const [isLoading, setIsLoading] = useState(false)
-  const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
 
@@ -62,33 +49,8 @@ export function Sidebar() {
         </Link>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
-        {navigation.map((item) => {
-          const isActive = pathname === item.href
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={`
-                flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors
-                ${isActive
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                }
-              `}
-            >
-              <item.icon className={`mr-3 h-5 w-5 ${isActive ? 'text-blue-600' : ''}`} />
-              {item.name}
-              {item.badge && (
-                <Badge variant="secondary" className="ml-auto text-xs">
-                  {item.badge}
-                </Badge>
-              )}
-            </Link>
-          )
-        })}
-      </nav>
+      {/* Spacer */}
+      <div className="flex-1" />
 
       <div className="px-3">
         <Separator />

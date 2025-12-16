@@ -9,12 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { DatabaseDocument as AppDocument } from '@/types/external-apis'
 import { ArrowLeft, Sparkles, Target, Scale, UserCircle, ClipboardList, Globe } from 'lucide-react'
 import { formatUploadDate } from '@/lib/date-utils'
-import {
-  LAW_FIRM_OPTIONS,
-  FUND_MANAGER_OPTIONS,
-  FUND_ADMIN_OPTIONS,
-  JURISDICTION_OPTIONS
-} from '@/lib/metadata-constants'
+import { getAllApprovedMetadataOptions } from '@/lib/metadata-options-server'
+import type { MetadataOption } from '@/lib/metadata-options-server'
 import { SourceDocumentActions } from '@/components/similarity/source-document-actions'
 import type { Metadata } from 'next'
 
@@ -26,8 +22,6 @@ interface PageProps {
   params: Promise<{ id: string }>
 }
 
-type MetadataOption = { value: string; label: string }
-
 const resolveOptionLabel = (value: unknown, options: ReadonlyArray<MetadataOption>): string => {
   if (typeof value !== 'string' || value.length === 0) {
     return value ? String(value) : ''
@@ -38,6 +32,9 @@ const resolveOptionLabel = (value: unknown, options: ReadonlyArray<MetadataOptio
 export default async function SimilarDocumentsPage({ params }: PageProps) {
   const { id } = await params
   const supabase = await createClient()
+
+  // Fetch metadata options for label resolution
+  const metadataOptions = await getAllApprovedMetadataOptions()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
@@ -118,7 +115,7 @@ export default async function SimilarDocumentsPage({ params }: PageProps) {
                     <div className="flex items-center gap-1">
                       <Scale className="h-3 w-3 text-gray-400" />
                       {document.metadata?.law_firm ? (
-                        <span className="text-gray-600">{resolveOptionLabel(document.metadata?.law_firm, LAW_FIRM_OPTIONS)}</span>
+                        <span className="text-gray-600">{resolveOptionLabel(document.metadata?.law_firm, metadataOptions.law_firm)}</span>
                       ) : (
                         <span className="text-orange-500">(blank)</span>
                       )}
@@ -126,7 +123,7 @@ export default async function SimilarDocumentsPage({ params }: PageProps) {
                     <div className="flex items-center gap-1">
                       <UserCircle className="h-3 w-3 text-gray-400" />
                       {document.metadata?.fund_manager ? (
-                        <span className="text-gray-600">{resolveOptionLabel(document.metadata?.fund_manager, FUND_MANAGER_OPTIONS)}</span>
+                        <span className="text-gray-600">{resolveOptionLabel(document.metadata?.fund_manager, metadataOptions.fund_manager)}</span>
                       ) : (
                         <span className="text-orange-500">(blank)</span>
                       )}
@@ -134,7 +131,7 @@ export default async function SimilarDocumentsPage({ params }: PageProps) {
                     <div className="flex items-center gap-1">
                       <ClipboardList className="h-3 w-3 text-gray-400" />
                       {document.metadata?.fund_admin ? (
-                        <span className="text-gray-600">{resolveOptionLabel(document.metadata?.fund_admin, FUND_ADMIN_OPTIONS)}</span>
+                        <span className="text-gray-600">{resolveOptionLabel(document.metadata?.fund_admin, metadataOptions.fund_admin)}</span>
                       ) : (
                         <span className="text-orange-500">(blank)</span>
                       )}
@@ -142,7 +139,7 @@ export default async function SimilarDocumentsPage({ params }: PageProps) {
                     <div className="flex items-center gap-1">
                       <Globe className="h-3 w-3 text-gray-400" />
                       {document.metadata?.jurisdiction ? (
-                        <span className="text-gray-600">{resolveOptionLabel(document.metadata?.jurisdiction, JURISDICTION_OPTIONS)}</span>
+                        <span className="text-gray-600">{resolveOptionLabel(document.metadata?.jurisdiction, metadataOptions.jurisdiction)}</span>
                       ) : (
                         <span className="text-orange-500">(blank)</span>
                       )}

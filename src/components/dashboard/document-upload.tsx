@@ -11,23 +11,13 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Upload, Loader2, Scale, UserCircle, ClipboardList, Globe, AlertTriangle, CheckCircle, Info } from 'lucide-react'
 import { useFileValidation } from '@/lib/file-validation'
-import { 
-  LAW_FIRM_OPTIONS, 
-  FUND_MANAGER_OPTIONS, 
-  FUND_ADMIN_OPTIONS, 
-  JURISDICTION_OPTIONS,
-  DEFAULT_METADATA,
-  type LawFirmOption,
-  type FundManagerOption,
-  type FundAdminOption,
-  type JurisdictionOption
-} from '@/lib/metadata-constants'
+import { useMetadataOptions } from '@/hooks/use-metadata-options'
 
 interface DocumentMetadata {
-  law_firm: LawFirmOption | ''
-  fund_manager: FundManagerOption | ''
-  fund_admin: FundAdminOption | ''
-  jurisdiction: JurisdictionOption | ''
+  law_firm: string
+  fund_manager: string
+  fund_admin: string
+  jurisdiction: string
 }
 
 interface TouchedFields {
@@ -77,6 +67,12 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
   const [error, setError] = useState<string | null>(null)
   const { validateFiles, getValidationSummary } = useFileValidation()
 
+  // Fetch metadata options from API
+  const { options: lawFirmOptions } = useMetadataOptions('law_firm')
+  const { options: fundManagerOptions } = useMetadataOptions('fund_manager')
+  const { options: fundAdminOptions } = useMetadataOptions('fund_admin')
+  const { options: jurisdictionOptions } = useMetadataOptions('jurisdiction')
+
   const handleFileSelect = useCallback(async (selectedFiles: FileList | null) => {
     if (!selectedFiles) return
 
@@ -102,7 +98,12 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
       id: Math.random().toString(36).substr(2, 9),
       progress: 0,
       status: 'validating' as const,
-      metadata: { ...DEFAULT_METADATA },
+      metadata: {
+        law_firm: '',
+        fund_manager: '',
+        fund_admin: '',
+        jurisdiction: ''
+      },
       touchedFields: {
         law_firm: false,
         fund_manager: false,
@@ -533,10 +534,10 @@ const canUpload = () => {
                             Law Firm
                           </Label>
                           <SearchableSelect
-                            options={LAW_FIRM_OPTIONS as unknown as {value: string; label: string}[]}
+                            options={lawFirmOptions}
                             value={uploadFile.metadata.law_firm}
                             onValueChange={(value: string) =>
-                              updateFileMetadata(uploadFile.id, 'law_firm', value as LawFirmOption)
+                              updateFileMetadata(uploadFile.id, 'law_firm', value)
                             }
                             placeholder="Please select"
                             searchPlaceholder="Search law firms..."
@@ -553,10 +554,10 @@ const canUpload = () => {
                             Fund Manager
                           </Label>
                           <SearchableSelect
-                            options={FUND_MANAGER_OPTIONS as unknown as {value: string; label: string}[]}
+                            options={fundManagerOptions}
                             value={uploadFile.metadata.fund_manager}
                             onValueChange={(value: string) =>
-                              updateFileMetadata(uploadFile.id, 'fund_manager', value as FundManagerOption)
+                              updateFileMetadata(uploadFile.id, 'fund_manager', value)
                             }
                             placeholder="Please select"
                             searchPlaceholder="Search fund managers..."
@@ -573,10 +574,10 @@ const canUpload = () => {
                             Fund Admin
                           </Label>
                           <SearchableSelect
-                            options={FUND_ADMIN_OPTIONS as unknown as {value: string; label: string}[]}
+                            options={fundAdminOptions}
                             value={uploadFile.metadata.fund_admin}
                             onValueChange={(value: string) =>
-                              updateFileMetadata(uploadFile.id, 'fund_admin', value as FundAdminOption)
+                              updateFileMetadata(uploadFile.id, 'fund_admin', value)
                             }
                             placeholder="Please select"
                             searchPlaceholder="Search fund admins..."
@@ -593,10 +594,10 @@ const canUpload = () => {
                             Jurisdiction
                           </Label>
                           <SearchableSelect
-                            options={JURISDICTION_OPTIONS as unknown as {value: string; label: string}[]}
+                            options={jurisdictionOptions}
                             value={uploadFile.metadata.jurisdiction}
                             onValueChange={(value: string) =>
-                              updateFileMetadata(uploadFile.id, 'jurisdiction', value as JurisdictionOption)
+                              updateFileMetadata(uploadFile.id, 'jurisdiction', value)
                             }
                             placeholder="Please select"
                             searchPlaceholder="Search jurisdictions..."

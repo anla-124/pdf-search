@@ -1,7 +1,8 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { unauthorizedError } from '@/lib/utils/api-response'
 import { logger } from '@/lib/logger'
+import { getUserRole } from '@/lib/user-role'
 
 export interface AuthResult {
   userId: string
@@ -72,6 +73,46 @@ export async function authenticateRequest(request: NextRequest) {
   return {
     userId: user.id,
     supabase,
+    isServiceRole: false
+  }
+}
+
+/**
+ * Authenticate and verify admin role for API request
+ *
+ * This function first authenticates the request, then checks if the user
+ * has an admin role in the public.users table.
+ *
+ * @returns AuthResult with userId and supabase client if admin, NextResponse with 403 error otherwise
+ */
+export async function requireAdmin(request: NextRequest) {
+  // First, authenticate the request
+  const authResult = await authenticateRequest(request)
+
+  // If authentication failed, return the error response
+  if (authResult instanceof NextResponse) {
+    return authResult
+  }
+
+  const { userId, supabase } = authResult
+
+  // Check if user has admin role
+  const role = await getUserRole(supabase, userId)
+
+  if (role !== 'admin') {
+    logger.warn('Admin access denied', { userId, role })
+    return NextResponse.json(
+      { error: 'Forbidden: Admin access required' },
+      { status: 403 }
+    )
+  }
+
+  logger.info('Admin access granted', { userId })
+
+  return {
+    userId,
+    supabase,
+    role: 'admin' as const,
     isServiceRole: false
   }
 }

@@ -61,6 +61,23 @@ CREATE TABLE IF NOT EXISTS public.users (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Create metadata_options table (admin-managed dropdown options)
+CREATE TABLE IF NOT EXISTS public.metadata_options (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  category TEXT NOT NULL CHECK (category IN ('law_firm', 'fund_manager', 'fund_admin', 'jurisdiction')),
+  value TEXT NOT NULL,
+  label TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'approved' CHECK (status IN ('approved')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(category, value)
+);
+
+-- CLEANUP NOTE: If you have an existing database with the old schema
+-- that includes the 'created_by' column, run this to remove it:
+--
+-- ALTER TABLE public.metadata_options DROP COLUMN IF EXISTS created_by;
+-- DROP INDEX IF EXISTS idx_metadata_options_created_by;
+
 -- Create documents table with enterprise features
 CREATE TABLE IF NOT EXISTS public.documents (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -239,6 +256,56 @@ ON documents(total_characters)
 WHERE total_characters IS NOT NULL;
 
 -- =====================================================
+-- USER TRIGGER: Auto-populate public.users from auth.users
+-- =====================================================
+-- This trigger ensures public.users is populated when users sign up
+-- via Supabase Auth. Without this, public.users stays empty and
+-- role-based features (like admin checks) won't work.
+
+-- Function to handle new user signups
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+SECURITY DEFINER
+SET search_path = public
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  INSERT INTO public.users (id, email, full_name, role, created_at, updated_at)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+    'user', -- Default role for new users
+    NOW(),
+    NOW()
+  )
+  ON CONFLICT (id) DO NOTHING; -- Skip if user already exists
+  RETURN NEW;
+END;
+$$;
+
+-- Trigger on auth.users to auto-populate public.users
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user();
+
+-- Backfill existing users from auth.users to public.users
+-- This ensures any users who signed up before this trigger was added
+-- are also present in public.users
+INSERT INTO public.users (id, email, full_name, role, created_at, updated_at)
+SELECT
+  id,
+  email,
+  COALESCE(raw_user_meta_data->>'full_name', ''),
+  'user',
+  created_at,
+  NOW()
+FROM auth.users
+ON CONFLICT (id) DO NOTHING; -- Skip if already exists
+
+-- =====================================================
 -- SECTION 3: ACTIVITY LOGGING SYSTEM
 -- =====================================================
 
@@ -398,6 +465,14 @@ CREATE INDEX IF NOT EXISTS idx_user_activity_logs_user_uuid ON user_activity_log
 CREATE INDEX IF NOT EXISTS idx_user_activity_logs_action_type ON user_activity_logs(action_type);
 CREATE INDEX IF NOT EXISTS idx_user_activity_logs_resource_type ON user_activity_logs(resource_type);
 
+-- Metadata options indexes
+CREATE INDEX IF NOT EXISTS idx_metadata_options_status ON public.metadata_options(status);
+CREATE INDEX IF NOT EXISTS idx_metadata_options_category ON public.metadata_options(category);
+CREATE INDEX IF NOT EXISTS idx_metadata_options_category_status ON public.metadata_options(category, status);
+CREATE INDEX IF NOT EXISTS idx_metadata_options_approved_by_category
+  ON public.metadata_options(category, label)
+  WHERE status = 'approved';
+
 -- =====================================================
 -- 🔍 KEYWORD SEARCH INDEXES (Full-Text Search)
 -- =====================================================
@@ -517,6 +592,7 @@ WHERE created_at >= NOW() - INTERVAL '24 hours';
 
 -- Enable RLS on all tables
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE metadata_options ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 -- RLS for extracted_fields removed (table no longer exists)
 ALTER TABLE document_embeddings ENABLE ROW LEVEL SECURITY;
@@ -530,6 +606,62 @@ DROP POLICY IF EXISTS "Users can view own profile" ON users;
 CREATE POLICY "Users can view own profile" ON users FOR SELECT USING (auth.uid() = id);
 DROP POLICY IF EXISTS "Users can update own profile" ON users;
 CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (auth.uid() = id);
+
+-- Metadata options policies (admin-only management)
+DROP POLICY IF EXISTS "Anyone can view approved options" ON metadata_options;
+CREATE POLICY "Anyone can view approved options"
+  ON public.metadata_options
+  FOR SELECT
+  USING (status = 'approved');
+
+DROP POLICY IF EXISTS "Admins can create options" ON metadata_options;
+CREATE POLICY "Admins can create options"
+  ON public.metadata_options
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE users.id = auth.uid()
+      AND users.role = 'admin'
+    )
+    AND status = 'approved'
+  );
+
+DROP POLICY IF EXISTS "Admins can view all options" ON metadata_options;
+CREATE POLICY "Admins can view all options"
+  ON public.metadata_options
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE users.id = auth.uid()
+      AND users.role = 'admin'
+    )
+  );
+
+DROP POLICY IF EXISTS "Admins can update options" ON metadata_options;
+CREATE POLICY "Admins can update options"
+  ON public.metadata_options
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE users.id = auth.uid()
+      AND users.role = 'admin'
+    )
+  );
+
+DROP POLICY IF EXISTS "Admins can delete options" ON metadata_options;
+CREATE POLICY "Admins can delete options"
+  ON public.metadata_options
+  FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE users.id = auth.uid()
+      AND users.role = 'admin'
+    )
+  );
 
 -- Documents policies - allow all anduintransact.com users full access
 DROP POLICY IF EXISTS "Users can view own documents" ON documents;
@@ -961,10 +1093,540 @@ GROUP BY tablename
 ORDER BY tablename;
 
 -- =====================================================
+-- SECTION 9: SEED METADATA OPTIONS
+-- =====================================================
+-- Populate the metadata_options table with initial 509 approved options
+-- These replace the hardcoded constants previously in src/lib/metadata-constants.ts
+--
+-- Breakdown:
+-- - Law Firms: 88
+-- - Fund Managers: 333
+-- - Fund Admins: 67
+-- - Jurisdictions: 21
+
+INSERT INTO public.metadata_options (category, value, label, status)
+VALUES
+  ('law_firm', 'Akin & Gump', 'Akin & Gump', 'approved'),
+  ('law_firm', 'Allen & Overy', 'Allen & Overy', 'approved'),
+  ('law_firm', 'Arendt & Medernach SA', 'Arendt & Medernach SA', 'approved'),
+  ('law_firm', 'Arthur Cox', 'Arthur Cox', 'approved'),
+  ('law_firm', 'Ashurst', 'Ashurst', 'approved'),
+  ('law_firm', 'Balch & Bingham LLP', 'Balch & Bingham LLP', 'approved'),
+  ('law_firm', 'Bedrock Group', 'Bedrock Group', 'approved'),
+  ('law_firm', 'Buchalter', 'Buchalter', 'approved'),
+  ('law_firm', 'Carey Olsen Jersey', 'Carey Olsen Jersey', 'approved'),
+  ('law_firm', 'Choate', 'Choate', 'approved'),
+  ('law_firm', 'Cleary Gottlieb Steen & Hamilton LLP (CGSH)', 'Cleary Gottlieb Steen & Hamilton LLP (CGSH)', 'approved'),
+  ('law_firm', 'Clifford Chance', 'Clifford Chance', 'approved'),
+  ('law_firm', 'Cohnreznick', 'Cohnreznick', 'approved'),
+  ('law_firm', 'Columbia Pacific Law Firm LLC', 'Columbia Pacific Law Firm LLC', 'approved'),
+  ('law_firm', 'Cooley LLP', 'Cooley LLP', 'approved'),
+  ('law_firm', 'Cornerstone', 'Cornerstone', 'approved'),
+  ('law_firm', 'Croke Fairchild Duarte & Beres LLC', 'Croke Fairchild Duarte & Beres LLC', 'approved'),
+  ('law_firm', 'Davis Polk', 'Davis Polk', 'approved'),
+  ('law_firm', 'Debevoise & Plimpton', 'Debevoise & Plimpton', 'approved'),
+  ('law_firm', 'Dechert LLP', 'Dechert LLP', 'approved'),
+  ('law_firm', 'Dentons', 'Dentons', 'approved'),
+  ('law_firm', 'DLA Piper', 'DLA Piper', 'approved'),
+  ('law_firm', 'Doida Crow Legal', 'Doida Crow Legal', 'approved'),
+  ('law_firm', 'Faegre Drinker', 'Faegre Drinker', 'approved'),
+  ('law_firm', 'Foley & Lardner', 'Foley & Lardner', 'approved'),
+  ('law_firm', 'Fried Frank', 'Fried Frank', 'approved'),
+  ('law_firm', 'Gibson Dunn & Crutcher', 'Gibson Dunn & Crutcher', 'approved'),
+  ('law_firm', 'Goodwin Procter LLP', 'Goodwin Procter LLP', 'approved'),
+  ('law_firm', 'Greenberg Traurig, LLP (GTLaw)', 'Greenberg Traurig, LLP (GTLaw)', 'approved'),
+  ('law_firm', 'Gunderson Dettmer', 'Gunderson Dettmer', 'approved'),
+  ('law_firm', 'Haynes Boone', 'Haynes Boone', 'approved'),
+  ('law_firm', 'Holland & Hart', 'Holland & Hart', 'approved'),
+  ('law_firm', 'Holland & Knight', 'Holland & Knight', 'approved'),
+  ('law_firm', 'Ice Miller', 'Ice Miller', 'approved'),
+  ('law_firm', 'In house', 'In house', 'approved'),
+  ('law_firm', 'Investment Law Group', 'Investment Law Group', 'approved'),
+  ('law_firm', 'Jackson Walker LLP', 'Jackson Walker LLP', 'approved'),
+  ('law_firm', 'K&L Gates', 'K&L Gates', 'approved'),
+  ('law_firm', 'Kirkland & Ellis', 'Kirkland & Ellis', 'approved'),
+  ('law_firm', 'Kromann Reumert', 'Kromann Reumert', 'approved'),
+  ('law_firm', 'Latham & Watkins', 'Latham & Watkins', 'approved'),
+  ('law_firm', 'Loyens & Loeff', 'Loyens & Loeff', 'approved'),
+  ('law_firm', 'Mag Stone Law', 'Mag Stone Law', 'approved'),
+  ('law_firm', 'Mannheimer Swartling Advokatbyra AB', 'Mannheimer Swartling Advokatbyra AB', 'approved'),
+  ('law_firm', 'Mayer Brown', 'Mayer Brown', 'approved'),
+  ('law_firm', 'Maynard Cooper & Gale', 'Maynard Cooper & Gale', 'approved'),
+  ('law_firm', 'McDermott Will & Emery', 'McDermott Will & Emery', 'approved'),
+  ('law_firm', 'McGuire Woods', 'McGuire Woods', 'approved'),
+  ('law_firm', 'Miles and Stockbridge', 'Miles and Stockbridge', 'approved'),
+  ('law_firm', 'Mofo', 'Mofo', 'approved'),
+  ('law_firm', 'Morgan Lewis', 'Morgan Lewis', 'approved'),
+  ('law_firm', 'Morrison & Foerster LLP', 'Morrison & Foerster LLP', 'approved'),
+  ('law_firm', 'Morrison Cohen', 'Morrison Cohen', 'approved'),
+  ('law_firm', 'Mourant', 'Mourant', 'approved'),
+  ('law_firm', 'Neal, Gerber & Eisenberg', 'Neal, Gerber & Eisenberg', 'approved'),
+  ('law_firm', 'Ogier', 'Ogier', 'approved'),
+  ('law_firm', 'Orrick Herrington & Sutcliffe', 'Orrick Herrington & Sutcliffe', 'approved'),
+  ('law_firm', 'Osborne Clarke', 'Osborne Clarke', 'approved'),
+  ('law_firm', 'Paul Weiss', 'Paul Weiss', 'approved'),
+  ('law_firm', 'Perkins Coie', 'Perkins Coie', 'approved'),
+  ('law_firm', 'Plesner', 'Plesner', 'approved'),
+  ('law_firm', 'Proskauer Rose (UK) LLP', 'Proskauer Rose (UK) LLP', 'approved'),
+  ('law_firm', 'Proskauer Rose (US) LLP', 'Proskauer Rose (US) LLP', 'approved'),
+  ('law_firm', 'Pryor Cashman LLP', 'Pryor Cashman LLP', 'approved'),
+  ('law_firm', 'Purrington Moody Weil (PMW)', 'Purrington Moody Weil (PMW)', 'approved'),
+  ('law_firm', 'Reed Smith', 'Reed Smith', 'approved'),
+  ('law_firm', 'Reitler Kailas & Rosenblatt LLP (RKR)', 'Reitler Kailas & Rosenblatt LLP (RKR)', 'approved'),
+  ('law_firm', 'Ropes & Gray', 'Ropes & Gray', 'approved'),
+  ('law_firm', 'Sadis & Goldberg', 'Sadis & Goldberg', 'approved'),
+  ('law_firm', 'Schulte Roth & Zabel (SRZ)', 'Schulte Roth & Zabel (SRZ)', 'approved'),
+  ('law_firm', 'Shearman & Sterling', 'Shearman & Sterling', 'approved'),
+  ('law_firm', 'Sidley Austin LLP', 'Sidley Austin LLP', 'approved'),
+  ('law_firm', 'Simpson Thacher & Bartlett', 'Simpson Thacher & Bartlett', 'approved'),
+  ('law_firm', 'Simpson Thacher & Bartlett (UK)', 'Simpson Thacher & Bartlett (UK)', 'approved'),
+  ('law_firm', 'Simpson Thacher & Bartlett (US)', 'Simpson Thacher & Bartlett (US)', 'approved'),
+  ('law_firm', 'Skadden', 'Skadden', 'approved'),
+  ('law_firm', 'Taft Stettinius & Hollister', 'Taft Stettinius & Hollister', 'approved'),
+  ('law_firm', 'Troutman', 'Troutman', 'approved'),
+  ('law_firm', 'Vinson & Elkins LLP', 'Vinson & Elkins LLP', 'approved'),
+  ('law_firm', 'Weil, Gotshal & Manges LLP', 'Weil, Gotshal & Manges LLP', 'approved'),
+  ('law_firm', 'Wiggin LLP', 'Wiggin LLP', 'approved'),
+  ('law_firm', 'Willkie Farr', 'Willkie Farr', 'approved'),
+  ('law_firm', 'WilmerHale', 'WilmerHale', 'approved'),
+  ('law_firm', 'Wilson Sonsini Goodrich & Rosati', 'Wilson Sonsini Goodrich & Rosati', 'approved'),
+  ('law_firm', 'Winstead', 'Winstead', 'approved'),
+  ('law_firm', 'Winston & Strawn LLP', 'Winston & Strawn LLP', 'approved'),
+  ('law_firm', 'Withers LLP', 'Withers LLP', 'approved'),
+  ('law_firm', 'No Info', 'No Info', 'approved'),
+  ('fund_manager', '1818', '1818', 'approved'),
+  ('fund_manager', '2150', '2150', 'approved'),
+  ('fund_manager', '10 East', '10 East', 'approved'),
+  ('fund_manager', '1982 Ventures', '1982 Ventures', 'approved'),
+  ('fund_manager', '3L Capital', '3L Capital', 'approved'),
+  ('fund_manager', '528Hz', '528Hz', 'approved'),
+  ('fund_manager', '747 Capital', '747 Capital', 'approved'),
+  ('fund_manager', '7wire Ventures', '7wire Ventures', 'approved'),
+  ('fund_manager', '8VC', '8VC', 'approved'),
+  ('fund_manager', 'ACA Group', 'ACA Group', 'approved'),
+  ('fund_manager', 'Access Holdings', 'Access Holdings', 'approved'),
+  ('fund_manager', 'Accolade Partners', 'Accolade Partners', 'approved'),
+  ('fund_manager', 'Addition', 'Addition', 'approved'),
+  ('fund_manager', 'Albacore Capital LLP', 'Albacore Capital LLP', 'approved'),
+  ('fund_manager', 'Alvarez & Marsal Capital', 'Alvarez & Marsal Capital', 'approved'),
+  ('fund_manager', 'Ambler Brook', 'Ambler Brook', 'approved'),
+  ('fund_manager', 'American Industrial Partners', 'American Industrial Partners', 'approved'),
+  ('fund_manager', 'American Securities LLC', 'American Securities LLC', 'approved'),
+  ('fund_manager', 'AnaCap FP', 'AnaCap FP', 'approved'),
+  ('fund_manager', 'Andreessen Horowitz', 'Andreessen Horowitz', 'approved'),
+  ('fund_manager', 'Anson Funds', 'Anson Funds', 'approved'),
+  ('fund_manager', 'Antler', 'Antler', 'approved'),
+  ('fund_manager', 'Apogem Capital LLC', 'Apogem Capital LLC', 'approved'),
+  ('fund_manager', 'Apollo Global Management', 'Apollo Global Management', 'approved'),
+  ('fund_manager', 'Arbour Lane Capital Management', 'Arbour Lane Capital Management', 'approved'),
+  ('fund_manager', 'Aristata', 'Aristata', 'approved'),
+  ('fund_manager', 'Arlington Capital Partners', 'Arlington Capital Partners', 'approved'),
+  ('fund_manager', 'Armanino LLP', 'Armanino LLP', 'approved'),
+  ('fund_manager', 'Arrow Global Group', 'Arrow Global Group', 'approved'),
+  ('fund_manager', 'Artemis Capital Partners', 'Artemis Capital Partners', 'approved'),
+  ('fund_manager', 'Artes Capital', 'Artes Capital', 'approved'),
+  ('fund_manager', 'Artis Ventures', 'Artis Ventures', 'approved'),
+  ('fund_manager', 'Aspirity Partners', 'Aspirity Partners', 'approved'),
+  ('fund_manager', 'Astanor Ventures', 'Astanor Ventures', 'approved'),
+  ('fund_manager', 'Asymmetric Capital Partners', 'Asymmetric Capital Partners', 'approved'),
+  ('fund_manager', 'Atlas Holdings', 'Atlas Holdings', 'approved'),
+  ('fund_manager', 'Atypical Partner', 'Atypical Partner', 'approved'),
+  ('fund_manager', 'Audax Group', 'Audax Group', 'approved'),
+  ('fund_manager', 'Autumn Lane Advisors', 'Autumn Lane Advisors', 'approved'),
+  ('fund_manager', 'Axcel', 'Axcel', 'approved'),
+  ('fund_manager', 'Axxes', 'Axxes', 'approved'),
+  ('fund_manager', 'Bain & Company', 'Bain & Company', 'approved'),
+  ('fund_manager', 'Bain Capital', 'Bain Capital', 'approved'),
+  ('fund_manager', 'Ballistic Ventures', 'Ballistic Ventures', 'approved'),
+  ('fund_manager', 'Baobab', 'Baobab', 'approved'),
+  ('fund_manager', 'Base Case Capital', 'Base Case Capital', 'approved'),
+  ('fund_manager', 'Bayswater', 'Bayswater', 'approved'),
+  ('fund_manager', 'Becker 8 LLC', 'Becker 8 LLC', 'approved'),
+  ('fund_manager', 'Bencis Capital Partners BV', 'Bencis Capital Partners BV', 'approved'),
+  ('fund_manager', 'Bessemer Venture Partners', 'Bessemer Venture Partners', 'approved'),
+  ('fund_manager', 'Biospring Partners', 'Biospring Partners', 'approved'),
+  ('fund_manager', 'Blackbird', 'Blackbird', 'approved'),
+  ('fund_manager', 'Blackstone Group', 'Blackstone Group', 'approved'),
+  ('fund_manager', 'Blossom Capital', 'Blossom Capital', 'approved'),
+  ('fund_manager', 'Blue Owl Capital', 'Blue Owl Capital', 'approved'),
+  ('fund_manager', 'Blue Torch Capital', 'Blue Torch Capital', 'approved'),
+  ('fund_manager', 'BlueArc Capital', 'BlueArc Capital', 'approved'),
+  ('fund_manager', 'BOND Capital', 'BOND Capital', 'approved'),
+  ('fund_manager', 'Brighton Park Capital Management LLC', 'Brighton Park Capital Management LLC', 'approved'),
+  ('fund_manager', 'Broadcrest', 'Broadcrest', 'approved'),
+  ('fund_manager', 'BV Investment Partners', 'BV Investment Partners', 'approved'),
+  ('fund_manager', 'Caduceus Capital Partners', 'Caduceus Capital Partners', 'approved'),
+  ('fund_manager', 'Calm Company Fund', 'Calm Company Fund', 'approved'),
+  ('fund_manager', 'CAP91', 'CAP91', 'approved'),
+  ('fund_manager', 'Capital Dynamics', 'Capital Dynamics', 'approved'),
+  ('fund_manager', 'CapMan', 'CapMan', 'approved'),
+  ('fund_manager', 'CapVest', 'CapVest', 'approved'),
+  ('fund_manager', 'Carlyle Group', 'Carlyle Group', 'approved'),
+  ('fund_manager', 'Causeway Equity Partners LLC', 'Causeway Equity Partners LLC', 'approved'),
+  ('fund_manager', 'CCP Operating, LLC', 'CCP Operating, LLC', 'approved'),
+  ('fund_manager', 'Centerbridge Partners', 'Centerbridge Partners', 'approved'),
+  ('fund_manager', 'Cerberus Capital Management', 'Cerberus Capital Management', 'approved'),
+  ('fund_manager', 'Chalfen Ventures', 'Chalfen Ventures', 'approved'),
+  ('fund_manager', 'Clarion Capital Partners', 'Clarion Capital Partners', 'approved'),
+  ('fund_manager', 'Clarion Partners', 'Clarion Partners', 'approved'),
+  ('fund_manager', 'Clayton, Dubilier & Rice', 'Clayton, Dubilier & Rice', 'approved'),
+  ('fund_manager', 'Clearlake Capital Group LP', 'Clearlake Capital Group LP', 'approved'),
+  ('fund_manager', 'Cohesive Capital Partners', 'Cohesive Capital Partners', 'approved'),
+  ('fund_manager', 'Collaborative Fund', 'Collaborative Fund', 'approved'),
+  ('fund_manager', 'Collective Rights', 'Collective Rights', 'approved'),
+  ('fund_manager', 'Coller Capital', 'Coller Capital', 'approved'),
+  ('fund_manager', 'Columbia Pacific Wealth Management', 'Columbia Pacific Wealth Management', 'approved'),
+  ('fund_manager', 'Commonfund Private Equity', 'Commonfund Private Equity', 'approved'),
+  ('fund_manager', 'Composition Capital', 'Composition Capital', 'approved'),
+  ('fund_manager', 'Compound Capital Holdings, LLC', 'Compound Capital Holdings, LLC', 'approved'),
+  ('fund_manager', 'Connect Ventures', 'Connect Ventures', 'approved'),
+  ('fund_manager', 'Cornerstone PE', 'Cornerstone PE', 'approved'),
+  ('fund_manager', 'Council Oaks Partners, LLC', 'Council Oaks Partners, LLC', 'approved'),
+  ('fund_manager', 'CRE Venture Capital', 'CRE Venture Capital', 'approved'),
+  ('fund_manager', 'Creador', 'Creador', 'approved'),
+  ('fund_manager', 'Crestview Partners', 'Crestview Partners', 'approved'),
+  ('fund_manager', 'Crow Holdings Capital Partners, L.L.C.', 'Crow Holdings Capital Partners, L.L.C.', 'approved'),
+  ('fund_manager', 'CVC Group', 'CVC Group', 'approved'),
+  ('fund_manager', 'CVC Secondary Partners', 'CVC Secondary Partners', 'approved'),
+  ('fund_manager', 'Dauntless Capital Partners', 'Dauntless Capital Partners', 'approved'),
+  ('fund_manager', 'Dechert', 'Dechert', 'approved'),
+  ('fund_manager', 'Definition Capital', 'Definition Capital', 'approved'),
+  ('fund_manager', 'Derby Copeland Capital', 'Derby Copeland Capital', 'approved'),
+  ('fund_manager', 'DIG Ventures', 'DIG Ventures', 'approved'),
+  ('fund_manager', 'Dimension Capital', 'Dimension Capital', 'approved'),
+  ('fund_manager', 'Dorchester Capital Advisors', 'Dorchester Capital Advisors', 'approved'),
+  ('fund_manager', 'Drive Capital, LLC', 'Drive Capital, LLC', 'approved'),
+  ('fund_manager', 'Eagle Rock Properties', 'Eagle Rock Properties', 'approved'),
+  ('fund_manager', 'EagleTree', 'EagleTree', 'approved'),
+  ('fund_manager', 'Eastward Capital Partners', 'Eastward Capital Partners', 'approved'),
+  ('fund_manager', 'EIV Capital', 'EIV Capital', 'approved'),
+  ('fund_manager', 'EJF Capital LLC', 'EJF Capital LLC', 'approved'),
+  ('fund_manager', 'EMK Capital', 'EMK Capital', 'approved'),
+  ('fund_manager', 'Endicott Capital Management, L.L.C.', 'Endicott Capital Management, L.L.C.', 'approved'),
+  ('fund_manager', 'Envision Life Labs LLC', 'Envision Life Labs LLC', 'approved'),
+  ('fund_manager', 'EQT Group', 'EQT Group', 'approved'),
+  ('fund_manager', 'EQUIAM', 'EQUIAM', 'approved'),
+  ('fund_manager', 'Eventide Asset Management Inc.', 'Eventide Asset Management Inc.', 'approved'),
+  ('fund_manager', 'Everside Capital Partners', 'Everside Capital Partners', 'approved'),
+  ('fund_manager', 'Fifth Wall', 'Fifth Wall', 'approved'),
+  ('fund_manager', 'Fin Capital', 'Fin Capital', 'approved'),
+  ('fund_manager', 'Foothill Ventures', 'Foothill Ventures', 'approved'),
+  ('fund_manager', 'Fortress Investment Group', 'Fortress Investment Group', 'approved'),
+  ('fund_manager', 'FPV Ventures', 'FPV Ventures', 'approved'),
+  ('fund_manager', 'Fulcrum Equity Partners', 'Fulcrum Equity Partners', 'approved'),
+  ('fund_manager', 'FUSE', 'FUSE', 'approved'),
+  ('fund_manager', 'G2 Venture Partners LLC', 'G2 Venture Partners LLC', 'approved'),
+  ('fund_manager', 'Gauge Capital LLC', 'Gauge Capital LLC', 'approved'),
+  ('fund_manager', 'GEC Partners', 'GEC Partners', 'approved'),
+  ('fund_manager', 'General Atlantic', 'General Atlantic', 'approved'),
+  ('fund_manager', 'Gerber/Taylor Management', 'Gerber/Taylor Management', 'approved'),
+  ('fund_manager', 'GI Partners Acquisitions LLC', 'GI Partners Acquisitions LLC', 'approved'),
+  ('fund_manager', 'Global Health Investment Fund (GHIC)', 'Global Health Investment Fund (GHIC)', 'approved'),
+  ('fund_manager', 'Global Infrastructure Partners', 'Global Infrastructure Partners', 'approved'),
+  ('fund_manager', 'Global Ventures LLC', 'Global Ventures LLC', 'approved'),
+  ('fund_manager', 'Graham Partners', 'Graham Partners', 'approved'),
+  ('fund_manager', 'Grain Management', 'Grain Management', 'approved'),
+  ('fund_manager', 'Great Hill Partners', 'Great Hill Partners', 'approved'),
+  ('fund_manager', 'Great Point Partners', 'Great Point Partners', 'approved'),
+  ('fund_manager', 'Greenoaks Capital', 'Greenoaks Capital', 'approved'),
+  ('fund_manager', 'Gridiron Capital', 'Gridiron Capital', 'approved'),
+  ('fund_manager', 'Group 11', 'Group 11', 'approved'),
+  ('fund_manager', 'GrowthCurve Capital', 'GrowthCurve Capital', 'approved'),
+  ('fund_manager', 'Guardian Capital Partners', 'Guardian Capital Partners', 'approved'),
+  ('fund_manager', 'Hamilton Lane', 'Hamilton Lane', 'approved'),
+  ('fund_manager', 'Harlan Capital Partners LLC', 'Harlan Capital Partners LLC', 'approved'),
+  ('fund_manager', 'Harvest Partners', 'Harvest Partners', 'approved'),
+  ('fund_manager', 'Haveli Investments', 'Haveli Investments', 'approved'),
+  ('fund_manager', 'Haymaker Capital', 'Haymaker Capital', 'approved'),
+  ('fund_manager', 'HCG Funds', 'HCG Funds', 'approved'),
+  ('fund_manager', 'Hellman & Friedman LLC', 'Hellman & Friedman LLC', 'approved'),
+  ('fund_manager', 'HFL', 'HFL', 'approved'),
+  ('fund_manager', 'Hg Pooled Management Limited', 'Hg Pooled Management Limited', 'approved'),
+  ('fund_manager', 'HighVista Strategies LLC', 'HighVista Strategies LLC', 'approved'),
+  ('fund_manager', 'Hillhouse Investment', 'Hillhouse Investment', 'approved'),
+  ('fund_manager', 'Hilltop Capital Partners LLC', 'Hilltop Capital Partners LLC', 'approved'),
+  ('fund_manager', 'Hines', 'Hines', 'approved'),
+  ('fund_manager', 'Hollyport Capital', 'Hollyport Capital', 'approved'),
+  ('fund_manager', 'HQ Capital', 'HQ Capital', 'approved'),
+  ('fund_manager', 'HQ Digital (Digital Currency Group)', 'HQ Digital (Digital Currency Group)', 'approved'),
+  ('fund_manager', 'Hughes & Company', 'Hughes & Company', 'approved'),
+  ('fund_manager', 'Humbition', 'Humbition', 'approved'),
+  ('fund_manager', 'I Squared Capital', 'I Squared Capital', 'approved'),
+  ('fund_manager', 'Index Ventures', 'Index Ventures', 'approved'),
+  ('fund_manager', 'Integrum Capital', 'Integrum Capital', 'approved'),
+  ('fund_manager', 'J.C. Flowers & Co. LLC', 'J.C. Flowers & Co. LLC', 'approved'),
+  ('fund_manager', 'Jackson Square Partners LLC', 'Jackson Square Partners LLC', 'approved'),
+  ('fund_manager', 'Jasper Ridge Services, LLC', 'Jasper Ridge Services, LLC', 'approved'),
+  ('fund_manager', 'JMI Equity', 'JMI Equity', 'approved'),
+  ('fund_manager', 'Jumpstart Foundry', 'Jumpstart Foundry', 'approved'),
+  ('fund_manager', 'Keensight Capital', 'Keensight Capital', 'approved'),
+  ('fund_manager', 'Kelso & Company', 'Kelso & Company', 'approved'),
+  ('fund_manager', 'Kimmeridge', 'Kimmeridge', 'approved'),
+  ('fund_manager', 'Kleiner Perkins', 'Kleiner Perkins', 'approved'),
+  ('fund_manager', 'KMD Investments', 'KMD Investments', 'approved'),
+  ('fund_manager', 'Kohlberg & Company', 'Kohlberg & Company', 'approved'),
+  ('fund_manager', 'Kohlberg Kravis Roberts & Co. (KKR)', 'Kohlberg Kravis Roberts & Co. (KKR)', 'approved'),
+  ('fund_manager', 'KSL Capital Partners', 'KSL Capital Partners', 'approved'),
+  ('fund_manager', 'KSV Global', 'KSV Global', 'approved'),
+  ('fund_manager', 'L Capital LLC', 'L Capital LLC', 'approved'),
+  ('fund_manager', 'Lattice Capital', 'Lattice Capital', 'approved'),
+  ('fund_manager', 'LCN Capital Partners LP', 'LCN Capital Partners LP', 'approved'),
+  ('fund_manager', 'Lexington Partners', 'Lexington Partners', 'approved'),
+  ('fund_manager', 'Linse Capital', 'Linse Capital', 'approved'),
+  ('fund_manager', 'Locust Point Capital, Inc', 'Locust Point Capital, Inc', 'approved'),
+  ('fund_manager', 'Long Path Partners', 'Long Path Partners', 'approved'),
+  ('fund_manager', 'Longwater Opportunities', 'Longwater Opportunities', 'approved'),
+  ('fund_manager', 'LS Power Development, LLC', 'LS Power Development, LLC', 'approved'),
+  ('fund_manager', 'Madison International Realty', 'Madison International Realty', 'approved'),
+  ('fund_manager', 'Madrona Venture Group', 'Madrona Venture Group', 'approved'),
+  ('fund_manager', 'Maple Park Capital Partners Management, LP', 'Maple Park Capital Partners Management, LP', 'approved'),
+  ('fund_manager', 'Marathon Asset Management', 'Marathon Asset Management', 'approved'),
+  ('fund_manager', 'Maroon Invest Global', 'Maroon Invest Global', 'approved'),
+  ('fund_manager', 'Matter Venture Partners', 'Matter Venture Partners', 'approved'),
+  ('fund_manager', 'MeetPerry', 'MeetPerry', 'approved'),
+  ('fund_manager', 'Melange Capital', 'Melange Capital', 'approved'),
+  ('fund_manager', 'Mesirow Financial', 'Mesirow Financial', 'approved'),
+  ('fund_manager', 'Metropolitan Partners Group', 'Metropolitan Partners Group', 'approved'),
+  ('fund_manager', 'Monarch Investment Partners Management, LLC', 'Monarch Investment Partners Management, LLC', 'approved'),
+  ('fund_manager', 'Monomoy Capital Management, L.P', 'Monomoy Capital Management, L.P', 'approved'),
+  ('fund_manager', 'Monroe Capital LLC', 'Monroe Capital LLC', 'approved'),
+  ('fund_manager', 'Moonfire Ventures', 'Moonfire Ventures', 'approved'),
+  ('fund_manager', 'NaviMed Capital', 'NaviMed Capital', 'approved'),
+  ('fund_manager', 'Neon', 'Neon', 'approved'),
+  ('fund_manager', 'Neuberger Berman', 'Neuberger Berman', 'approved'),
+  ('fund_manager', 'New 2nd Capital', 'New 2nd Capital', 'approved'),
+  ('fund_manager', 'New Enterprise Associates', 'New Enterprise Associates', 'approved'),
+  ('fund_manager', 'New MainStream Capital', 'New MainStream Capital', 'approved'),
+  ('fund_manager', 'New Mountain Capital, LLC', 'New Mountain Capital, LLC', 'approved'),
+  ('fund_manager', 'Newpath Partners', 'Newpath Partners', 'approved'),
+  ('fund_manager', 'NewRoad Capital Partners', 'NewRoad Capital Partners', 'approved'),
+  ('fund_manager', 'NewVest Management, LP', 'NewVest Management, LP', 'approved'),
+  ('fund_manager', 'Next Play Capital', 'Next Play Capital', 'approved'),
+  ('fund_manager', 'Nordic Capital', 'Nordic Capital', 'approved'),
+  ('fund_manager', 'Nordic Investment Opportunities', 'Nordic Investment Opportunities', 'approved'),
+  ('fund_manager', 'Nordstar', 'Nordstar', 'approved'),
+  ('fund_manager', 'Noteus', 'Noteus', 'approved'),
+  ('fund_manager', 'NXSTEP', 'NXSTEP', 'approved'),
+  ('fund_manager', 'Oak Hill Capital', 'Oak Hill Capital', 'approved'),
+  ('fund_manager', 'Oakley Capital', 'Oakley Capital', 'approved'),
+  ('fund_manager', 'OIC', 'OIC', 'approved'),
+  ('fund_manager', 'Old Hickory Partners', 'Old Hickory Partners', 'approved'),
+  ('fund_manager', 'One Peak Partners', 'One Peak Partners', 'approved'),
+  ('fund_manager', 'OneVentures', 'OneVentures', 'approved'),
+  ('fund_manager', 'Onex Corp', 'Onex Corp', 'approved'),
+  ('fund_manager', 'Opto Investments', 'Opto Investments', 'approved'),
+  ('fund_manager', 'Orchard Investment Partners', 'Orchard Investment Partners', 'approved'),
+  ('fund_manager', 'Outsiders', 'Outsiders', 'approved'),
+  ('fund_manager', 'Pacific Lake Partners', 'Pacific Lake Partners', 'approved'),
+  ('fund_manager', 'PAG', 'PAG', 'approved'),
+  ('fund_manager', 'Palladium Equity Partners, LLC', 'Palladium Equity Partners, LLC', 'approved'),
+  ('fund_manager', 'ParaFi Capital', 'ParaFi Capital', 'approved'),
+  ('fund_manager', 'PartnersAdmin LLC', 'PartnersAdmin LLC', 'approved'),
+  ('fund_manager', 'Paul Weiss', 'Paul Weiss', 'approved'),
+  ('fund_manager', 'PC2 Capital', 'PC2 Capital', 'approved'),
+  ('fund_manager', 'Peak XV Partners Operations LLC', 'Peak XV Partners Operations LLC', 'approved'),
+  ('fund_manager', 'Penny Jar Capital', 'Penny Jar Capital', 'approved'),
+  ('fund_manager', 'PGIM Real Estate', 'PGIM Real Estate', 'approved'),
+  ('fund_manager', 'Phoenix Court', 'Phoenix Court', 'approved'),
+  ('fund_manager', 'Pine Valley Capital Partners LLC', 'Pine Valley Capital Partners LLC', 'approved'),
+  ('fund_manager', 'Platinum Equity', 'Platinum Equity', 'approved'),
+  ('fund_manager', 'Pomona Capital', 'Pomona Capital', 'approved'),
+  ('fund_manager', 'Portfolio Advisors', 'Portfolio Advisors', 'approved'),
+  ('fund_manager', 'Potential Capital', 'Potential Capital', 'approved'),
+  ('fund_manager', 'Praxis Ventures', 'Praxis Ventures', 'approved'),
+  ('fund_manager', 'PrideCo Capital Partners', 'PrideCo Capital Partners', 'approved'),
+  ('fund_manager', 'Primary Venture Partners', 'Primary Venture Partners', 'approved'),
+  ('fund_manager', 'Principal Financial Group', 'Principal Financial Group', 'approved'),
+  ('fund_manager', 'Proskauer Rose LLP', 'Proskauer Rose LLP', 'approved'),
+  ('fund_manager', 'Proterra Investment Partners', 'Proterra Investment Partners', 'approved'),
+  ('fund_manager', 'PSG Equity L.L.C.', 'PSG Equity L.L.C.', 'approved'),
+  ('fund_manager', 'Quad-C', 'Quad-C', 'approved'),
+  ('fund_manager', 'Quantum Energy Partners (2020), LLC', 'Quantum Energy Partners (2020), LLC', 'approved'),
+  ('fund_manager', 'Raga Partners', 'Raga Partners', 'approved'),
+  ('fund_manager', 'Recharge Capital', 'Recharge Capital', 'approved'),
+  ('fund_manager', 'Recognize', 'Recognize', 'approved'),
+  ('fund_manager', 'Recurring Capital Partners', 'Recurring Capital Partners', 'approved'),
+  ('fund_manager', 'Renovo Capital', 'Renovo Capital', 'approved'),
+  ('fund_manager', 'Restive', 'Restive', 'approved'),
+  ('fund_manager', 'Resurgens Technology Advisors, L.P.', 'Resurgens Technology Advisors, L.P.', 'approved'),
+  ('fund_manager', 'Revelstoke Capital Partners LLC', 'Revelstoke Capital Partners LLC', 'approved'),
+  ('fund_manager', 'Rialto Capital', 'Rialto Capital', 'approved'),
+  ('fund_manager', 'Rivean Capital', 'Rivean Capital', 'approved'),
+  ('fund_manager', 'Riverwood Capital', 'Riverwood Capital', 'approved'),
+  ('fund_manager', 'Roark Capital', 'Roark Capital', 'approved'),
+  ('fund_manager', 'Rockpoint Group', 'Rockpoint Group', 'approved'),
+  ('fund_manager', 'Rothschild', 'Rothschild', 'approved'),
+  ('fund_manager', 'Rule 1 Ventures', 'Rule 1 Ventures', 'approved'),
+  ('fund_manager', 'Sageview Capital', 'Sageview Capital', 'approved'),
+  ('fund_manager', 'Satori Capital', 'Satori Capital', 'approved'),
+  ('fund_manager', 'Savory Fund', 'Savory Fund', 'approved'),
+  ('fund_manager', 'Second Alpha', 'Second Alpha', 'approved'),
+  ('fund_manager', 'Section 32', 'Section 32', 'approved'),
+  ('fund_manager', 'Section Partners', 'Section Partners', 'approved'),
+  ('fund_manager', 'Sequoia Capital', 'Sequoia Capital', 'approved'),
+  ('fund_manager', 'Sequoia Heritage', 'Sequoia Heritage', 'approved'),
+  ('fund_manager', 'Silver Hill Energy Partners', 'Silver Hill Energy Partners', 'approved'),
+  ('fund_manager', 'Silver Lake', 'Silver Lake', 'approved'),
+  ('fund_manager', 'Silver Point Capital', 'Silver Point Capital', 'approved'),
+  ('fund_manager', 'Singular Capital Partners', 'Singular Capital Partners', 'approved'),
+  ('fund_manager', 'Sixth Street', 'Sixth Street', 'approved'),
+  ('fund_manager', 'Sole Source Capital LLC', 'Sole Source Capital LLC', 'approved'),
+  ('fund_manager', 'Solum Capital', 'Solum Capital', 'approved'),
+  ('fund_manager', 'Sonoma Brands Capital', 'Sonoma Brands Capital', 'approved'),
+  ('fund_manager', 'Spicewood Mineral Partners', 'Spicewood Mineral Partners', 'approved'),
+  ('fund_manager', 'Sprints Capital Management Ltd', 'Sprints Capital Management Ltd', 'approved'),
+  ('fund_manager', 'Standish', 'Standish', 'approved'),
+  ('fund_manager', 'STB Partners Fund', 'STB Partners Fund', 'approved'),
+  ('fund_manager', 'Sterling Investment Partners', 'Sterling Investment Partners', 'approved'),
+  ('fund_manager', 'Stillmark', 'Stillmark', 'approved'),
+  ('fund_manager', 'Stokes Stevenson', 'Stokes Stevenson', 'approved'),
+  ('fund_manager', 'Stone Point Capital', 'Stone Point Capital', 'approved'),
+  ('fund_manager', 'Stone Ridge', 'Stone Ridge', 'approved'),
+  ('fund_manager', 'Stripes', 'Stripes', 'approved'),
+  ('fund_manager', 'Sukna Ventures', 'Sukna Ventures', 'approved'),
+  ('fund_manager', 'Tailwind Management LP', 'Tailwind Management LP', 'approved'),
+  ('fund_manager', 'Ten Coves Capital', 'Ten Coves Capital', 'approved'),
+  ('fund_manager', 'Tenzing', 'Tenzing', 'approved'),
+  ('fund_manager', 'The Artemis Fund', 'The Artemis Fund', 'approved'),
+  ('fund_manager', 'The Bascom Group', 'The Bascom Group', 'approved'),
+  ('fund_manager', 'The Jordan Company', 'The Jordan Company', 'approved'),
+  ('fund_manager', 'Thomas H. Lee Partners', 'Thomas H. Lee Partners', 'approved'),
+  ('fund_manager', 'Thorofare Capital Inc', 'Thorofare Capital Inc', 'approved'),
+  ('fund_manager', 'TIFF', 'TIFF', 'approved'),
+  ('fund_manager', 'Timber Bay Partners', 'Timber Bay Partners', 'approved'),
+  ('fund_manager', 'Tinicum Incorporated', 'Tinicum Incorporated', 'approved'),
+  ('fund_manager', 'TOP Venture', 'TOP Venture', 'approved'),
+  ('fund_manager', 'Touch Capital', 'Touch Capital', 'approved'),
+  ('fund_manager', 'TowerBrook', 'TowerBrook', 'approved'),
+  ('fund_manager', 'TPA', 'TPA', 'approved'),
+  ('fund_manager', 'TPG', 'TPG', 'approved'),
+  ('fund_manager', 'Tribe Capital Partners', 'Tribe Capital Partners', 'approved'),
+  ('fund_manager', 'TrueBridge Capital Partners', 'TrueBridge Capital Partners', 'approved'),
+  ('fund_manager', 'Truewind', 'Truewind', 'approved'),
+  ('fund_manager', 'Turn/River Management L.P.', 'Turn/River Management L.P.', 'approved'),
+  ('fund_manager', 'Uncommon Denominator', 'Uncommon Denominator', 'approved'),
+  ('fund_manager', 'Upward Leader', 'Upward Leader', 'approved'),
+  ('fund_manager', 'Urban Partners', 'Urban Partners', 'approved'),
+  ('fund_manager', 'Valeas Capital Partners', 'Valeas Capital Partners', 'approved'),
+  ('fund_manager', 'Valor Capital Group', 'Valor Capital Group', 'approved'),
+  ('fund_manager', 'Valor Equity Partners', 'Valor Equity Partners', 'approved'),
+  ('fund_manager', 'venBio', 'venBio', 'approved'),
+  ('fund_manager', 'Ventures Platform', 'Ventures Platform', 'approved'),
+  ('fund_manager', 'VentureSouq', 'VentureSouq', 'approved'),
+  ('fund_manager', 'VGC Partners LLP', 'VGC Partners LLP', 'approved'),
+  ('fund_manager', 'Vinyl', 'Vinyl', 'approved'),
+  ('fund_manager', 'VMG Partners', 'VMG Partners', 'approved'),
+  ('fund_manager', 'Voss Capital', 'Voss Capital', 'approved'),
+  ('fund_manager', 'VSS Capital Partners', 'VSS Capital Partners', 'approved'),
+  ('fund_manager', 'Vulcan Value Partners', 'Vulcan Value Partners', 'approved'),
+  ('fund_manager', 'W Capital Partners', 'W Capital Partners', 'approved'),
+  ('fund_manager', 'Weatherford Capital Management LLC', 'Weatherford Capital Management LLC', 'approved'),
+  ('fund_manager', 'Wellspring Capital Management Group LLC', 'Wellspring Capital Management Group LLC', 'approved'),
+  ('fund_manager', 'WestCap', 'WestCap', 'approved'),
+  ('fund_manager', 'Westport Capital Partners', 'Westport Capital Partners', 'approved'),
+  ('fund_manager', 'WM Partners', 'WM Partners', 'approved'),
+  ('fund_manager', 'WovenEarth Ventures', 'WovenEarth Ventures', 'approved'),
+  ('fund_manager', 'Wynnchurch', 'Wynnchurch', 'approved'),
+  ('fund_admin', '4Pines Fund Services', '4Pines Fund Services', 'approved'),
+  ('fund_admin', 'Aduro', 'Aduro', 'approved'),
+  ('fund_admin', 'Alpha Alternatives', 'Alpha Alternatives', 'approved'),
+  ('fund_admin', 'Alter Domus', 'Alter Domus', 'approved'),
+  ('fund_admin', 'Altum', 'Altum', 'approved'),
+  ('fund_admin', 'Andrea Brown', 'Andrea Brown', 'approved'),
+  ('fund_admin', 'Apex', 'Apex', 'approved'),
+  ('fund_admin', 'Atlas', 'Atlas', 'approved'),
+  ('fund_admin', 'Aztec Group', 'Aztec Group', 'approved'),
+  ('fund_admin', 'Barrier Crest', 'Barrier Crest', 'approved'),
+  ('fund_admin', 'Belasko', 'Belasko', 'approved'),
+  ('fund_admin', 'BNP Paribas Securities Services', 'BNP Paribas Securities Services', 'approved'),
+  ('fund_admin', 'BNY Mellon', 'BNY Mellon', 'approved'),
+  ('fund_admin', 'CACEIS', 'CACEIS', 'approved'),
+  ('fund_admin', 'Carta', 'Carta', 'approved'),
+  ('fund_admin', 'Centaur Fund Services', 'Centaur Fund Services', 'approved'),
+  ('fund_admin', 'CITCO', 'CITCO', 'approved'),
+  ('fund_admin', 'Columbia Pacific Law Firm LLC', 'Columbia Pacific Law Firm LLC', 'approved'),
+  ('fund_admin', 'Conner', 'Conner', 'approved'),
+  ('fund_admin', 'Cornerstone', 'Cornerstone', 'approved'),
+  ('fund_admin', 'Dominion', 'Dominion', 'approved'),
+  ('fund_admin', 'EFG', 'EFG', 'approved'),
+  ('fund_admin', 'European Fund Administration', 'European Fund Administration', 'approved'),
+  ('fund_admin', 'Fairway', 'Fairway', 'approved'),
+  ('fund_admin', 'FIS', 'FIS', 'approved'),
+  ('fund_admin', 'Formidian', 'Formidian', 'approved'),
+  ('fund_admin', 'Gen II', 'Gen II', 'approved'),
+  ('fund_admin', 'GP Fund Solutions (GPFS)', 'GP Fund Solutions (GPFS)', 'approved'),
+  ('fund_admin', 'HFL', 'HFL', 'approved'),
+  ('fund_admin', 'HSBC Securities Services', 'HSBC Securities Services', 'approved'),
+  ('fund_admin', 'In-house', 'In-house', 'approved'),
+  ('fund_admin', 'Intertrust Group B.V', 'Intertrust Group B.V', 'approved'),
+  ('fund_admin', 'INTREAL', 'INTREAL', 'approved'),
+  ('fund_admin', 'IQ-EQ', 'IQ-EQ', 'approved'),
+  ('fund_admin', 'JP Morgan', 'JP Morgan', 'approved'),
+  ('fund_admin', 'JTC Fund Services', 'JTC Fund Services', 'approved'),
+  ('fund_admin', 'Langham Hall', 'Langham Hall', 'approved'),
+  ('fund_admin', 'Liccar Fund Services', 'Liccar Fund Services', 'approved'),
+  ('fund_admin', 'Maitland', 'Maitland', 'approved'),
+  ('fund_admin', 'Maples', 'Maples', 'approved'),
+  ('fund_admin', 'Meritage', 'Meritage', 'approved'),
+  ('fund_admin', 'MG Stover', 'MG Stover', 'approved'),
+  ('fund_admin', 'Morgan Stanley', 'Morgan Stanley', 'approved'),
+  ('fund_admin', 'Northern Trust', 'Northern Trust', 'approved'),
+  ('fund_admin', 'NREP', 'NREP', 'approved'),
+  ('fund_admin', 'Ocorian', 'Ocorian', 'approved'),
+  ('fund_admin', 'Partners Admin', 'Partners Admin', 'approved'),
+  ('fund_admin', 'Permian', 'Permian', 'approved'),
+  ('fund_admin', 'Pictet Fund Administration', 'Pictet Fund Administration', 'approved'),
+  ('fund_admin', 'RBC Investor & Treasury Services', 'RBC Investor & Treasury Services', 'approved'),
+  ('fund_admin', 'Sanne Group', 'Sanne Group', 'approved'),
+  ('fund_admin', 'SEI', 'SEI', 'approved'),
+  ('fund_admin', 'Société Générale Securities Services', 'Société Générale Securities Services', 'approved'),
+  ('fund_admin', 'SS&C', 'SS&C', 'approved'),
+  ('fund_admin', 'Standish', 'Standish', 'approved'),
+  ('fund_admin', 'State Street', 'State Street', 'approved'),
+  ('fund_admin', 'Strata', 'Strata', 'approved'),
+  ('fund_admin', 'Swiss Financial Services', 'Swiss Financial Services', 'approved'),
+  ('fund_admin', 'Theorem', 'Theorem', 'approved'),
+  ('fund_admin', 'TMF Group', 'TMF Group', 'approved'),
+  ('fund_admin', 'Tower', 'Tower', 'approved'),
+  ('fund_admin', 'Trustmoore', 'Trustmoore', 'approved'),
+  ('fund_admin', 'Ultimus LeverPoint', 'Ultimus LeverPoint', 'approved'),
+  ('fund_admin', 'UMB', 'UMB', 'approved'),
+  ('fund_admin', 'Venture Back Office', 'Venture Back Office', 'approved'),
+  ('fund_admin', 'XFO', 'XFO', 'approved'),
+  ('fund_admin', 'No Info', 'No Info', 'approved'),
+  ('jurisdiction', 'Alberta, Canada', 'Alberta, Canada', 'approved'),
+  ('jurisdiction', 'Bermuda', 'Bermuda', 'approved'),
+  ('jurisdiction', 'British Virgin Islands (BVI)', 'British Virgin Islands (BVI)', 'approved'),
+  ('jurisdiction', 'Cayman Islands', 'Cayman Islands', 'approved'),
+  ('jurisdiction', 'Delaware', 'Delaware', 'approved'),
+  ('jurisdiction', 'Denmark', 'Denmark', 'approved'),
+  ('jurisdiction', 'England', 'England', 'approved'),
+  ('jurisdiction', 'Finland', 'Finland', 'approved'),
+  ('jurisdiction', 'France', 'France', 'approved'),
+  ('jurisdiction', 'Germany', 'Germany', 'approved'),
+  ('jurisdiction', 'Guernsey', 'Guernsey', 'approved'),
+  ('jurisdiction', 'Ireland', 'Ireland', 'approved'),
+  ('jurisdiction', 'Jersey', 'Jersey', 'approved'),
+  ('jurisdiction', 'Luxembourg', 'Luxembourg', 'approved'),
+  ('jurisdiction', 'Mauritius', 'Mauritius', 'approved'),
+  ('jurisdiction', 'Netherlands', 'Netherlands', 'approved'),
+  ('jurisdiction', 'New South Wales', 'New South Wales', 'approved'),
+  ('jurisdiction', 'Province of Ontario, Canada', 'Province of Ontario, Canada', 'approved'),
+  ('jurisdiction', 'Scotland', 'Scotland', 'approved'),
+  ('jurisdiction', 'State of New York', 'State of New York', 'approved'),
+  ('jurisdiction', 'No Info', 'No Info', 'approved')
+ON CONFLICT (category, value) DO UPDATE
+SET
+  label = EXCLUDED.label,
+  status = EXCLUDED.status;
+
+-- =====================================================
 -- SUCCESS! 🎉
 -- =====================================================
 -- Your PDF AI Assistant database is now ready for:
 -- ✅ Complete database schema with storage bucket (50 MB PDF uploads)
+-- ✅ User authentication with auto-population trigger
+-- ✅ 509 pre-seeded metadata options (law firms, fund managers, admins, jurisdictions)
 -- ✅ Enterprise-scale document processing with 3x faster uploads
 -- ✅ Production-ready concurrent processing (10+ documents in parallel)
 -- ✅ Automatic stuck job recovery (15-minute auto-retry)
@@ -983,11 +1645,22 @@ ORDER BY tablename;
 -- - Monitor job performance: SELECT * FROM job_performance_monitoring;
 --
 -- Next steps:
--- 1. Update your .env files with Supabase credentials
--- 2. Set MAX_CONCURRENT_DOCUMENTS=10 (or adjust based on your infrastructure)
--- 3. Run 'npm run dev' to start the application
--- 4. Access admin features at /admin for monitoring
--- 5. Review PRODUCTION_MONITORING.md for alert configuration
+-- 1. Verify users were backfilled:
+--    SELECT COUNT(*) as auth_users FROM auth.users;
+--    SELECT COUNT(*) as public_users FROM public.users;
+--    (Both counts should match!)
+--
+-- 2. Promote yourself to admin (replace with your email):
+--    UPDATE public.users SET role = 'admin' WHERE email = 'your@email.com';
+--
+-- 3. Verify admin user:
+--    SELECT id, email, role FROM public.users WHERE role = 'admin';
+--
+-- 4. Update your .env files with Supabase credentials
+-- 5. Set MAX_CONCURRENT_DOCUMENTS=10 (or adjust based on your infrastructure)
+-- 6. Run 'npm run dev' to start the application
+-- 7. Manage metadata options directly in Supabase Table Editor (metadata_options table)
+-- 8. Review PRODUCTION_MONITORING.md for alert configuration
 -- =====================================================
 
 -- =====================================================
