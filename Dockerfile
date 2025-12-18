@@ -1,5 +1,5 @@
 # Multi-stage build for Next.js PDF AI Assistant
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -90,8 +90,22 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
+# Install curl for health checks and dcron for job processing
+RUN apk add --no-cache curl dcron
+
+# Create log directory
+RUN mkdir -p /var/log && touch /var/log/cron.log
+
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:3000/api/health || exit 1
 
-CMD ["node", "server.js"]
+# Create startup script that sets up cron and starts Next.js
+RUN echo '#!/bin/sh' > /app/start.sh && \
+    echo 'echo "* * * * * curl -f -H \"Authorization: Bearer $CRON_SECRET\" http://localhost:3000/api/cron/process-jobs >> /var/log/cron.log 2>&1" > /etc/crontabs/root' >> /app/start.sh && \
+    echo 'crond' >> /app/start.sh && \
+    echo 'echo "Cron service started for job processing (every minute)"' >> /app/start.sh && \
+    echo 'exec node server.js' >> /app/start.sh && \
+    chmod +x /app/start.sh
+
+CMD ["/app/start.sh"]
