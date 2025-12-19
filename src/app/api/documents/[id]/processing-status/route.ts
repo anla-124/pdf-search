@@ -75,44 +75,44 @@ export async function GET(
 function getProcessingPhase(documentStatus: string, message: string): string {
   // Map status and message to specific phase
   if (documentStatus === 'uploading' || message.includes('upload')) {
-    return 'upload'
+    return 'Upload'
   }
-  
+
   if (documentStatus === 'queued') {
-    return 'upload' // Upload completed, queued for processing
+    return 'Upload' // Upload completed, queued for processing
   }
-  
+
   if (documentStatus === 'processing') {
     if (message.includes('Document AI') || message.includes('processing')) {
-      return 'extraction'
+      return 'Extraction'
     }
     if (message.includes('structured') || message.includes('fields')) {
-      return 'analysis'
+      return 'Analysis'
     }
     if (message.includes('embedding') || message.includes('generating')) {
-      return 'embeddings'
+      return 'Embeddings'
     }
     if (message.includes('index') || message.includes('Qdrant')) {
-      return 'indexing'
+      return 'Indexing'
     }
     // Default to extraction if no specific phase detected
-    return 'extraction'
+    return 'Extraction'
   }
-  
+
   if (documentStatus === 'completed') {
-    return 'indexing' // All phases complete
+    return 'Indexing' // All phases complete
   }
-  
+
   if (documentStatus === 'error') {
     // Try to determine which phase failed
-    if (message.includes('upload') || message.includes('storage')) return 'upload'
-    if (message.includes('Document AI') || message.includes('processing')) return 'extraction'
-    if (message.includes('embedding')) return 'embeddings'
-    if (message.includes('Qdrant') || message.includes('index')) return 'indexing'
-    return 'extraction' // Default error phase
+    if (message.includes('upload') || message.includes('storage')) return 'Upload'
+    if (message.includes('Document AI') || message.includes('processing')) return 'Extraction'
+    if (message.includes('embedding')) return 'Embeddings'
+    if (message.includes('Qdrant') || message.includes('index')) return 'Indexing'
+    return 'Extraction' // Default error phase
   }
-  
-  return 'upload'
+
+  return 'Upload'
 }
 
 function getPhaseProgress(documentStatus: string, statusProgress: number): number {

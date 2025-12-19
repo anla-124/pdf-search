@@ -82,7 +82,7 @@ docker-compose up -d --build
 docker-compose ps
 
 # View logs
-docker-compose logs -f pdf-ai-assistant
+docker-compose logs -f pdf-search
 ```
 
 ### 5. Verify Deployment
@@ -103,7 +103,7 @@ Uses hosted Supabase + self-hosted Qdrant:
 
 ```yaml
 services:
-  pdf-ai-assistant:
+  pdf-search:
     # ... uses external Supabase
   qdrant:
     # ... self-hosted
@@ -118,7 +118,7 @@ Uncomment PostgreSQL in `docker-compose.yml`:
 
 ```yaml
 services:
-  pdf-ai-assistant:
+  pdf-search:
     depends_on:
       postgres:
         condition: service_healthy
@@ -220,10 +220,10 @@ curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
 
 ```bash
 # App logs
-docker-compose logs -f pdf-ai-assistant
+docker-compose logs -f pdf-search
 
 # Cron job logs
-docker-compose logs -f pdf-ai-assistant | grep "cron"
+docker-compose logs -f pdf-search | grep "cron"
 
 # Qdrant logs
 docker-compose logs -f qdrant
@@ -252,14 +252,14 @@ du -sh /var/lib/docker/volumes/pdf-search_*
 
 ```bash
 # Check logs
-docker-compose logs pdf-ai-assistant
+docker-compose logs pdf-search
 
 # Common issues:
 # 1. Missing credentials
 ls -la credentials/google-service-account.json
 
 # 2. Database connection
-docker-compose exec pdf-ai-assistant curl http://localhost:3000/api/health
+docker-compose exec pdf-search curl http://localhost:3000/api/health
 
 # 3. Build errors
 docker-compose build --no-cache
@@ -269,14 +269,14 @@ docker-compose build --no-cache
 
 ```bash
 # Check cron is running
-docker-compose exec pdf-ai-assistant ps aux | grep crond
+docker-compose exec pdf-search ps aux | grep crond
 
 # Test manual trigger
-docker-compose exec pdf-ai-assistant curl -H "Authorization: Bearer $CRON_SECRET" \
+docker-compose exec pdf-search curl -H "Authorization: Bearer $CRON_SECRET" \
   http://localhost:3000/api/cron/process-jobs
 
 # Check cron logs
-docker-compose exec pdf-ai-assistant cat /var/log/cron.log
+docker-compose exec pdf-search cat /var/log/cron.log
 ```
 
 ### Qdrant Connection Failed
@@ -286,7 +286,7 @@ docker-compose exec pdf-ai-assistant cat /var/log/cron.log
 curl http://localhost:6333/
 
 # Check network connectivity
-docker-compose exec pdf-ai-assistant ping qdrant
+docker-compose exec pdf-search ping qdrant
 
 # Recreate Qdrant
 docker-compose stop qdrant
@@ -331,7 +331,7 @@ docker system prune -a
 docker-compose exec postgres pg_dump -U postgres pdf_search > backup.sql
 
 # Run migrations
-docker-compose exec pdf-ai-assistant npm run migrate
+docker-compose exec pdf-search npm run migrate
 ```
 
 ## Performance Tuning
@@ -352,7 +352,7 @@ UPLOAD_PER_USER_LIMIT=10
 Restart:
 
 ```bash
-docker-compose restart pdf-ai-assistant
+docker-compose restart pdf-search
 ```
 
 ### Resource Limits
@@ -361,7 +361,7 @@ Edit `docker-compose.yml`:
 
 ```yaml
 services:
-  pdf-ai-assistant:
+  pdf-search:
     deploy:
       resources:
         limits:
@@ -388,7 +388,7 @@ echo "my-secret" | docker secret create cron_secret -
 
 ```yaml
 services:
-  pdf-ai-assistant:
+  pdf-search:
     networks:
       - frontend
       - backend
@@ -402,7 +402,7 @@ services:
 
 ```yaml
 services:
-  pdf-ai-assistant:
+  pdf-search:
     read_only: true
     tmpfs:
       - /tmp

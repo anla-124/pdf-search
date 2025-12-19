@@ -105,7 +105,7 @@ openssl rand -base64 32
 
 | Service | Purpose | Port | Required |
 |---------|---------|------|----------|
-| pdf-ai-assistant | Main app + cron | 3000 | Yes |
+| pdf-search | Main app + cron | 3000 | Yes |
 | qdrant | Vector database | 6333 | Yes |
 | postgres | SQL database | 5432 | Optional (using Supabase) |
 
@@ -116,13 +116,13 @@ openssl rand -base64 32
 docker-compose up -d
 
 # View logs
-docker-compose logs -f pdf-ai-assistant
+docker-compose logs -f pdf-search
 
 # Check service status
 docker-compose ps
 
 # Restart after config change
-docker-compose restart pdf-ai-assistant
+docker-compose restart pdf-search
 
 # Stop all services
 docker-compose down
@@ -152,7 +152,7 @@ curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
   http://localhost:3000/api/cron/process-jobs
 
 # View cron logs
-docker-compose exec pdf-ai-assistant cat /var/log/cron.log
+docker-compose exec pdf-search cat /var/log/cron.log
 ```
 
 ## Production Checklist
@@ -219,7 +219,7 @@ docker-compose exec postgres pg_dump -U postgres pdf_search > backup.sql
 ### App won't start
 ```bash
 # Check logs
-docker-compose logs pdf-ai-assistant
+docker-compose logs pdf-search
 
 # Common issues:
 # 1. Missing credentials file
@@ -232,7 +232,7 @@ lsof -i:3000
 ### Jobs not processing
 ```bash
 # Check cron is running
-docker-compose exec pdf-ai-assistant ps aux | grep crond
+docker-compose exec pdf-search ps aux | grep crond
 
 # Manual trigger
 curl -H "Authorization: Bearer $CRON_SECRET" \
@@ -275,7 +275,7 @@ UPLOAD_PER_USER_LIMIT=10
 
 Then restart:
 ```bash
-docker-compose restart pdf-ai-assistant
+docker-compose restart pdf-search
 ```
 
 ## Documentation

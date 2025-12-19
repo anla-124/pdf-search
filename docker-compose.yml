@@ -1,6 +1,6 @@
 services:
   # Main PDF Search Application
-  pdf-ai-assistant:
+  pdf-search:
     container_name: pdf-search-app
     env_file:
       - .env.local
@@ -20,6 +20,9 @@ services:
         - QDRANT_API_KEY=${QDRANT_API_KEY}
         - QDRANT_COLLECTION_NAME=${QDRANT_COLLECTION_NAME}
         - CRON_SECRET=${CRON_SECRET}
+        - NEXT_PUBLIC_DRAFTABLE_ACCOUNT_ID=${NEXT_PUBLIC_DRAFTABLE_ACCOUNT_ID}
+        - DRAFTABLE_AUTH_TOKEN=${DRAFTABLE_AUTH_TOKEN}
+        - NEXT_PUBLIC_DRAFTABLE_API_URL=${NEXT_PUBLIC_DRAFTABLE_API_URL}
     ports:
       - "3000:3000"
     environment:
@@ -27,12 +30,7 @@ services:
     volumes:
       - ./credentials:/app/credentials:ro
       - cron-logs:/var/log
-    depends_on:
-      qdrant:
-        condition: service_healthy
-      # Uncomment if using self-hosted PostgreSQL:
-      # postgres:
-      #   condition: service_healthy
+    # No dependencies - using hosted Supabase and Qdrant
     networks:
       - app-network
     restart: unless-stopped
@@ -42,27 +40,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  # Qdrant Vector Database (self-hosted)
-  qdrant:
-    container_name: pdf-search-qdrant
-    image: qdrant/qdrant:latest
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - qdrant-storage:/qdrant/storage
-    environment:
-      - QDRANT__SERVICE__GRPC_PORT=6334
-    networks:
-      - app-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6333/"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
 
   # PostgreSQL Database (optional - uncomment if not using hosted Supabase)
   # postgres:
@@ -92,8 +69,6 @@ networks:
     driver: bridge
 
 volumes:
-  qdrant-storage:
-    driver: local
   cron-logs:
     driver: local
   # Uncomment if using self-hosted PostgreSQL:

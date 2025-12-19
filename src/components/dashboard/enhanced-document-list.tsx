@@ -908,26 +908,34 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
     setSelectedDocuments(newSelected)
   }
 
-  // Check if all documents on current page are selected
+  // Check if all selectable documents on current page are selected
   const areAllCurrentPageSelected = () => {
-    return paginatedDocuments.every(doc => selectedDocuments.has(doc.id))
+    const selectableDocuments = paginatedDocuments.filter(doc =>
+      !['uploading', 'queued', 'processing'].includes(doc.status)
+    )
+    if (selectableDocuments.length === 0) return false
+    return selectableDocuments.every(doc => selectedDocuments.has(doc.id))
   }
 
   const toggleAllDocuments = () => {
     const newSelected = new Set(selectedDocuments)
-    const currentPageIds = paginatedDocuments.map(doc => doc.id)
+    // Only include selectable documents (not processing)
+    const selectableDocuments = paginatedDocuments.filter(doc =>
+      !['uploading', 'queued', 'processing'].includes(doc.status)
+    )
+    const selectableIds = selectableDocuments.map(doc => doc.id)
 
     if (areAllCurrentPageSelected()) {
-      // Deselect all documents on current page EXCEPT the source document
-      currentPageIds.forEach(id => {
+      // Deselect all selectable documents on current page EXCEPT the source document
+      selectableIds.forEach(id => {
         if (id !== sourceForSelectionId) {
           newSelected.delete(id)
         }
       })
       // sourceForSelectionId is preserved - Selected Search mode stays active
     } else {
-      // Select all documents on current page (add to set)
-      currentPageIds.forEach(id => newSelected.add(id))
+      // Select all selectable documents on current page (add to set)
+      selectableIds.forEach(id => newSelected.add(id))
     }
 
     setSelectedDocuments(newSelected)
@@ -1674,7 +1682,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                             <Checkbox
                               checked={isSelected}
                               onCheckedChange={() => toggleDocumentSelection(document.id)}
-                              disabled={isSource}
+                              disabled={isSource || ['uploading', 'queued', 'processing'].includes(document.status)}
                               aria-label={`Select ${document.title}`}
                             />
                           </TableCell>
@@ -1834,6 +1842,36 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                                 </Button>
                               )}
 
+                              {document.status === 'cancelled' && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleRetryProcessing(document)}
+                                    disabled={retryingDocuments.has(document.id)}
+                                    className="h-8"
+                                  >
+                                    {retryingDocuments.has(document.id) ? (
+                                      <>
+                                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                        Retrying...
+                                      </>
+                                    ) : (
+                                      'Retry'
+                                    )}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setDeleteDialog({ document, isOpen: true, isDeleting: false })}
+                                    className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-300"
+                                  >
+                                    <Trash2 className="h-3 w-3 mr-1" />
+                                    Delete
+                                  </Button>
+                                </>
+                              )}
+
                               {/* More Options Menu */}
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -1871,7 +1909,7 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                                   </DropdownMenuItem>
 
                                   {/* Cancel Processing Option */}
-                                  {['queued', 'processing'].includes(document.status) && (() => {
+                                  {['uploading', 'queued', 'processing'].includes(document.status) && (() => {
                                     const isCancelling = cancellingDocuments.has(document.id)
                                     const isDialogOpen = cancelDialogOpen === document.id
                                     return (
@@ -1937,16 +1975,21 @@ export function EnhancedDocumentList({ refreshTrigger = 0 }: DocumentListProps) 
                                     )
                                   })()}
 
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    className="flex items-center text-red-600"
-                                    onSelect={() => {
-                                      setDeleteDialog({ document, isOpen: true, isDeleting: false })
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete
-                                  </DropdownMenuItem>
+                                  {/* Delete Option - Only show for non-processing documents */}
+                                  {!['uploading', 'queued', 'processing'].includes(document.status) && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        className="flex items-center text-red-600"
+                                        onSelect={() => {
+                                          setDeleteDialog({ document, isOpen: true, isDeleting: false })
+                                        }}
+                                      >
+                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>

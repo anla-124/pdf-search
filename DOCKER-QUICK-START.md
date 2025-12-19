@@ -27,7 +27,7 @@ Done! App running on http://localhost:3000
 
 | Service | Purpose | Port | Status |
 |---------|---------|------|--------|
-| pdf-ai-assistant | Main app + cron | 3000 | Required |
+| pdf-search | Main app + cron | 3000 | Required |
 | qdrant | Vector database | 6333 | Required |
 | postgres | SQL database | 5432 | Optional (using Supabase by default) |
 
@@ -74,10 +74,10 @@ docker-compose up -d
 docker-compose down
 
 # Logs
-docker-compose logs -f pdf-ai-assistant
+docker-compose logs -f pdf-search
 
 # Restart after config change
-docker-compose restart pdf-ai-assistant
+docker-compose restart pdf-search
 
 # Full rebuild
 docker-compose down && docker-compose up -d --build
@@ -95,24 +95,24 @@ curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
   http://localhost:3000/api/cron/process-jobs
 
 # View cron logs
-docker-compose exec pdf-ai-assistant cat /var/log/cron.log
+docker-compose exec pdf-search cat /var/log/cron.log
 
 # Watch processing in real-time
-docker-compose logs -f pdf-ai-assistant | grep "Processing"
+docker-compose logs -f pdf-search | grep "Processing"
 ```
 
 ## Troubleshooting
 
 ### App won't start
 ```bash
-docker-compose logs pdf-ai-assistant
+docker-compose logs pdf-search
 # Check: credentials file exists, env vars set
 ```
 
 ### Jobs not processing
 ```bash
 # Check cron is running
-docker-compose exec pdf-ai-assistant ps aux | grep crond
+docker-compose exec pdf-search ps aux | grep crond
 
 # Manual trigger
 curl -H "Authorization: Bearer $CRON_SECRET" \
