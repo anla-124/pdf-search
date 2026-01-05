@@ -1,15 +1,27 @@
 # Deployment Summary for IT Team
 
+## ⚠️ SECURITY WARNING
+
+**CRITICAL:** The `.env` file currently contains production credentials and is tracked in git. This is a security risk and should be addressed:
+
+1. **Immediate action needed:** Remove real credentials from `.env` before pushing to public repositories
+2. **Recommended approach:**
+   - Use `.env.example` with placeholder values in git
+   - Keep actual `.env` with real credentials out of version control
+   - Use environment-specific files (`.env.production`, `.env.staging`) locally
+   - Consider using a secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.)
+
 ## Overview
 This document provides a quick reference for deploying the PDF Search application to your company server using Docker.
 
-## Latest Changes (Dec 18, 2025)
-- Improved table UI responsiveness for small screens
-- Shortened button labels to prevent collisions
-- Fixed text truncation in Name columns
-- Optimized column widths for better mobile/tablet experience
+## Latest Changes (Jan 5, 2026)
+- Fixed Docker build failures in fresh environments
+- Added package-lock.json to repository (required for npm ci)
+- Simplified environment variable handling
+- Removed .env from .dockerignore for proper build-time loading
+- Streamlined Dockerfile (removed 28 lines of redundant ARG/ENV)
 
-**Latest commit:** `2e6b714` - "feat: improve table UI responsiveness and button labels"
+**Latest commit:** `8726c36` - "fix: resolve Docker build failures for deployment"
 
 ## Quick Deployment (2 Minutes)
 
@@ -58,10 +70,10 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-# Vector Database (Using Docker service)
-QDRANT_URL=http://qdrant:6333
-QDRANT_API_KEY=  # Leave empty for local
-QDRANT_COLLECTION_NAME=pdf_embeddings
+# Vector Database (Qdrant Cloud)
+QDRANT_URL=https://your-cluster.aws.cloud.qdrant.io
+QDRANT_API_KEY=your-api-key
+QDRANT_COLLECTION_NAME=subscription-documents
 
 # Job Processing (Required)
 CRON_SECRET=generate-secure-random-string-here
@@ -86,17 +98,19 @@ openssl rand -base64 32
 └────────┬────────┘
          │ :3000
          ↓
-┌─────────────────┐     ┌──────────────┐     ┌──────────────┐
-│  PDF Search App │────→│   Qdrant     │     │  Supabase    │
-│  + Cron (60s)   │     │  (vectors)   │     │  (database)  │
-└─────────────────┘     └──────────────┘     └──────────────┘
-         │
-         ↓
 ┌─────────────────┐
-│  Google Cloud   │
-│  Document AI    │
-│  Vertex AI      │
-└─────────────────┘
+│  PDF Search App │──────┐
+│  + Cron (60s)   │      │
+└─────────┬───────┘      │
+          │              │
+          ├──────────────┼─────→ Qdrant Cloud (AWS us-east-1)
+          │              │       Vector embeddings storage
+          │              │
+          ├──────────────┼─────→ Supabase Cloud
+          │              │       PostgreSQL database
+          │              │
+          └──────────────┴─────→ Google Cloud Document AI
+                                 PDF processing & OCR
 ```
 
 ## Services
@@ -104,29 +118,32 @@ openssl rand -base64 32
 | Service | Purpose | Port | Required |
 |---------|---------|------|----------|
 | pdf-search | Main app + cron | 3000 | Yes |
-| qdrant | Vector database | 6333 | Yes |
-| postgres | SQL database | 5432 | Optional (using Supabase) |
+
+**External Services:**
+- Qdrant Cloud (vector database)
+- Supabase Cloud (PostgreSQL database)
+- Google Cloud Document AI (PDF processing)
 
 ## Common Commands
 
 ```bash
 # Start services
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f pdf-search
+docker compose logs -f pdf-search
 
 # Check service status
-docker-compose ps
+docker compose ps
 
 # Restart after config change
-docker-compose restart pdf-search
+docker compose restart pdf-search
 
 # Stop all services
-docker-compose down
+docker compose down
 
 # Full rebuild
-docker-compose down && docker-compose up -d --build
+docker compose down && docker compose up -d --build
 ```
 
 ## Monitoring
@@ -138,9 +155,6 @@ curl http://localhost:3000/api/health
 
 # Database pool status
 curl http://localhost:3000/api/health/pool
-
-# Qdrant status
-curl http://localhost:6333/
 ```
 
 ### Job Queue
@@ -150,7 +164,7 @@ curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
   http://localhost:3000/api/cron/process-jobs
 
 # View cron logs
-docker-compose exec pdf-search cat /var/log/cron.log
+docker compose exec pdf-search cat /var/log/cron.log
 ```
 
 ## Production Checklist
@@ -158,10 +172,11 @@ docker-compose exec pdf-search cat /var/log/cron.log
 - [ ] Set strong `CRON_SECRET` (use `openssl rand -base64 32`)
 - [ ] Configure firewall (allow port 3000)
 - [ ] Set up HTTPS/reverse proxy (see deployment/DOCKER-DEPLOYMENT.md)
-- [ ] Enable automated backups for Qdrant volumes
+- [ ] Verify cloud service backups (Qdrant Cloud, Supabase)
 - [ ] Configure monitoring/alerts
 - [ ] Test concurrent uploads (see deployment/TESTING.md)
-- [ ] Document access credentials securely
+- [ ] **SECURITY:** Remove credentials from `.env` and use environment-specific files
+- [ ] Document access credentials securely (use secrets manager)
 
 ## Firewall Configuration
 
@@ -198,26 +213,17 @@ server {
 ## Backup Strategy
 
 ### Qdrant Data
-```bash
-# Backup Qdrant vectors
-docker run --rm \
-  -v pdf-search_qdrant-storage:/data \
-  -v $(pwd)/backups:/backup \
-  alpine tar czf /backup/qdrant-$(date +%Y%m%d).tar.gz /data
-```
+Qdrant Cloud provides automated backups and snapshots. See Qdrant Cloud dashboard for backup configuration.
 
 ### Database
-Supabase provides automated backups. For self-hosted PostgreSQL:
-```bash
-docker-compose exec postgres pg_dump -U postgres pdf_search > backup.sql
-```
+Supabase Cloud provides automated backups and point-in-time recovery. Access backup settings in your Supabase dashboard.
 
 ## Troubleshooting
 
 ### App won't start
 ```bash
 # Check logs
-docker-compose logs pdf-search
+docker compose logs pdf-search
 
 # Common issues:
 # 1. Missing credentials file
@@ -225,26 +231,27 @@ ls -la credentials/google-service-account.json
 
 # 2. Port already in use
 lsof -i:3000
+
+# 3. Environment variables not loaded
+docker compose exec pdf-search env | grep NEXT_PUBLIC
 ```
 
 ### Jobs not processing
 ```bash
 # Check cron is running
-docker-compose exec pdf-search ps aux | grep crond
+docker compose exec pdf-search ps aux | grep crond
 
 # Manual trigger
 curl -H "Authorization: Bearer $CRON_SECRET" \
   http://localhost:3000/api/cron/process-jobs
 ```
 
-### Qdrant connection failed
-```bash
-# Check Qdrant is running
-curl http://localhost:6333/
-
-# Restart Qdrant
-docker-compose restart qdrant
-```
+### External service connection issues
+Check your `.env` file for correct credentials:
+- NEXT_PUBLIC_SUPABASE_URL
+- SUPABASE_SERVICE_ROLE_KEY
+- QDRANT_URL and QDRANT_API_KEY
+- GOOGLE_CLOUD_PROJECT_ID
 
 ## Resource Requirements
 
@@ -273,7 +280,7 @@ UPLOAD_PER_USER_LIMIT=10
 
 Then restart:
 ```bash
-docker-compose restart pdf-search
+docker compose restart pdf-search
 ```
 
 ## Documentation
