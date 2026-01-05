@@ -190,12 +190,12 @@ For production deployment with managed services:
 
     **For free tier plans:**
     ```bash
-    cp .env.free.template .env.local
+    cp .env.free.template .env
     ```
 
     **For paid tier plans (higher performance limits):**
     ```bash
-    cp .env.paid.template .env.local
+    cp .env.paid.template .env
     ```
 
 2.  **Set up managed Supabase:**
@@ -209,7 +209,11 @@ For production deployment with managed services:
     - Get your cluster URL and API key
     - Create a collection using the Qdrant dashboard or API
 
-4.  Fill in all required environment variables in `.env.local`.
+4.  **Get Google Cloud credentials:**
+    - Download service account JSON from Google Cloud Console
+    - Place in `./credentials/google-service-account.json`
+
+5.  Fill in all required environment variables in `.env`.
 
 5.  When uploading documents, you can optionally populate the metadata card for each file (law firm, fund manager, fund admin, jurisdiction).
 
@@ -345,10 +349,30 @@ Results are sorted by `sourceScore`, then `targetScore`, then matched target cha
 
 ## Deployment
 
-### Docker
+### Docker Deployment (Production)
 
-This project includes a `Dockerfile` and `docker-compose.yml` for building and running the application in a Docker container.
+**Quick deployment (2 minutes):**
 
 ```bash
-docker-compose up -d --build
+# 1. Clone repository
+git clone https://github.com/anla-124/pdf-search.git
+cd pdf-search
+
+# 2. Add Google credentials
+mkdir -p credentials
+cp /path/to/google-service-account.json credentials/
+
+# 3. Start services
+docker compose up -d
+
+# 4. Verify deployment
+curl http://localhost:3000/api/health
 ```
+
+**Note:** The `.env` file contains production credentials. For new deployments, copy from `.env.free.template` or `.env.paid.template` based on your tier.
+
+**Architecture:**
+- Single Docker container (pdf-search-app)
+- External services: Qdrant Cloud, Supabase Cloud, Google Cloud Document AI
+
+For detailed deployment instructions, troubleshooting, and configuration options, see [DEPLOYMENT-SUMMARY.md](./DEPLOYMENT-SUMMARY.md).
