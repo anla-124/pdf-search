@@ -38,9 +38,11 @@ This document provides a quick reference for deploying the PDF Search applicatio
 git clone https://github.com/anla-124/pdf-search.git
 cd pdf-search
 
-# 2. Add Google credentials (if not already present)
+# 2. Add Google credentials
 mkdir -p credentials
-cp /path/to/google-service-account.json credentials/
+# Option A: Get the file from your team and place it in credentials/
+# Option B: Download from Google Cloud Console (see below)
+# The file should be at: credentials/google-service-account.json
 
 # 3. Start services
 docker compose up -d
@@ -50,6 +52,18 @@ curl http://localhost:3000/api/health
 ```
 
 **Note:** The `.env` file contains production credentials. For new deployments, copy from `.env.free.template` or `.env.paid.template` based on your tier.
+
+### Getting Google Cloud Credentials
+
+**Option A - Get from team (recommended):**
+Ask your team for the `google-service-account.json` file and place it in `credentials/`
+
+**Option B - Download from Google Cloud Console:**
+1. Go to https://console.cloud.google.com/
+2. Select project: `fine-craft-471904-i4`
+3. Go to **IAM & Admin** → **Service Accounts**
+4. Find the service account → **Keys** → **Add Key** → **Create new key** → **JSON**
+5. Save as `credentials/google-service-account.json`
 
 ## Configuration
 

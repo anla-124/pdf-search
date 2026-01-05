@@ -360,7 +360,9 @@ cd pdf-search
 
 # 2. Add Google credentials
 mkdir -p credentials
-cp /path/to/google-service-account.json credentials/
+# Get google-service-account.json from your team
+# or download from Google Cloud Console
+# Place it at: credentials/google-service-account.json
 
 # 3. Start services
 docker compose up -d
