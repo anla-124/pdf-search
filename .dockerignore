@@ -25,9 +25,8 @@ docker-compose.*.yml
 !deployment/*.md
 
 # Environment files
-# Note: .env is included for build-time NEXT_PUBLIC_* variables
-# .env.local excluded (not in git, user-specific)
-.env.local
+# Note: .env and .env.local are included for build-time NEXT_PUBLIC_* variables
+# .env = template (in git), .env.local = real credentials (not in git)
 .env.development.local
 .env.test.local
 .env.production.local
