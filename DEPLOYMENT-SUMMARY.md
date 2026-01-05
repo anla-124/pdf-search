@@ -11,7 +11,7 @@ This document provides a quick reference for deploying the PDF Search applicatio
 
 **Latest commit:** `2e6b714` - "feat: improve table UI responsiveness and button labels"
 
-## Quick Deployment (5 Minutes)
+## Quick Deployment (2 Minutes)
 
 ### Prerequisites
 - Docker Engine 20.10+
@@ -26,26 +26,24 @@ This document provides a quick reference for deploying the PDF Search applicatio
 git clone https://github.com/anla-124/pdf-search.git
 cd pdf-search
 
-# 2. Configure environment
-cp .env.free.template .env.local
-# Edit .env.local with your values (see Configuration section below)
-
-# 3. Add Google credentials
+# 2. Add Google credentials (if not already present)
 mkdir -p credentials
 cp /path/to/google-service-account.json credentials/
 
-# 4. Start services
-docker-compose up -d --build
+# 3. Start services
+docker compose up -d
 
-# 5. Verify deployment
+# 4. Verify deployment
 curl http://localhost:3000/api/health
 ```
 
+**Note:** All environment variables are pre-configured in the `.env` file. No additional configuration needed for standard deployment.
+
 ## Configuration
 
-### Required Environment Variables
+### Environment Variables
 
-Edit `.env.local` with the following:
+The `.env` file contains all required configuration. If you need to modify any values, edit the `.env` file with:
 
 ```bash
 # Google Cloud (Required)
@@ -262,7 +260,7 @@ docker-compose restart qdrant
 
 ## Performance Tuning
 
-To handle more concurrent uploads, edit `.env.local`:
+To handle more concurrent uploads, edit `.env`:
 
 ```bash
 # Increase from 10 to 20 concurrent documents

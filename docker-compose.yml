@@ -3,7 +3,7 @@ services:
   pdf-search:
     container_name: pdf-search-app
     env_file:
-      - .env.local
+      - .env
     build:
       context: .
       dockerfile: Dockerfile
