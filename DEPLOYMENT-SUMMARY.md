@@ -49,7 +49,7 @@ docker compose up -d
 curl http://localhost:3000/api/health
 ```
 
-**Note:** All environment variables are pre-configured in the `.env` file. No additional configuration needed for standard deployment.
+**Note:** The `.env` file contains production credentials. For new deployments, copy from `.env.free.template` or `.env.paid.template` based on your tier.
 
 ## Configuration
 
