@@ -28,7 +28,7 @@ google-service-account.json
 *.pfx
 
 # Exclude specific JSON files but allow config files
-package-lock.json
+# Note: package-lock.json is tracked for Docker builds
 !package.json
 !tsconfig.json
 !components.json

@@ -24,8 +24,9 @@ docker-compose.*.yml
 *.md
 !deployment/*.md
 
-# Environment files (loaded at runtime, not build time)
-.env
+# Environment files
+# Note: .env is included for build-time NEXT_PUBLIC_* variables
+# .env.local excluded (not in git, user-specific)
 .env.local
 .env.development.local
 .env.test.local
